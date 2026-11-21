@@ -632,7 +632,7 @@ extern "C" void setInfo(NppData data)
     std::array<wchar_t, 32768> path{};
     if (!SendMessage(npp._nppHandle, NPPM_GETPLUGINSCONFIGDIR, path.size(), reinterpret_cast<LPARAM>(path.data()))) return;
     configPath = path.data();
-    settingsPath = (configPath / L"RainSyntax-settings.ini").wstring();
+    settingsPath = (configPath / SettingsFile).wstring();
     ConfigureVocabulary(ReadTextFile(configPath / VocabularyFile));
 }
 extern "C" const wchar_t* getName() { return L"RainSyntax"; }

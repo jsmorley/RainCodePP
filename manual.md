@@ -44,6 +44,8 @@ A bang on its own line in a skin uses the **Invalid Value** style, with or witho
 
 Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. There are seven light palettes, including **Ivory**, six dark palettes, and **JSMorley**, based on Jeffrey Morley's RainLexer colors.
 
+To remove a preset from your dropdown, hold **Shift** while it is highlighted and click the entry marked **(delete)**. The change applies to your profile and survives upgrades. To restore the entry, close RainSyntax Settings and remove that preset's line from the `[HiddenPresets]` section of `RainSyntax-settings.ini`.
+
 - **Use preset** copies the preview into your editable palette.
 - In **Set style for syntax types**, hover over a choice for a brief description. Select a type to change its foreground, background, font, size, bold, italic, or underline. Changing the **Default** background updates the blank area of the Rainmeter tab and every style that inherits it. Selecting an individual style and choosing a background creates an override. Use **Set all backgrounds** to clear all overrides and set one background for the entire tab.
 - Click **Foreground** or **Background** to paste a hex color such as `#4681AD` or `4681AD`. The swatch previews the color before you click **OK**. **Browse colors** opens the visual picker.

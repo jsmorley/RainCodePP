@@ -8,6 +8,7 @@
 #include <string_view>
 
 namespace RainSyntax {
+inline constexpr wchar_t SettingsFile[] = L"RainSyntax-settings.ini";
 inline constexpr wchar_t VocabularyFile[] = L"RainSyntax-vocabulary.txt";
 inline constexpr wchar_t UninstallerFile[] = L"Uninstall RainSyntax.exe";
 

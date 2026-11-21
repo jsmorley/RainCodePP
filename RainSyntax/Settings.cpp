@@ -18,6 +18,7 @@
 #include <optional>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -26,6 +27,9 @@ using Path = std::filesystem::path;
 constexpr wchar_t DefaultPreset[] = L"Clear Skies";
 constexpr UINT_PTR RestartTimer = 1;
 constexpr UINT_PTR OwnerTimer = 2;
+constexpr UINT_PTR PresetShiftTimer = 3;
+constexpr UINT RemovePresetMessage = WM_APP + 1;
+constexpr wchar_t HiddenPresetsSection[] = L"HiddenPresets";
 constexpr std::string_view PreviewLines[] = {
     "[Rainmeter]",
     "; Rainmeter syntax preview",
@@ -453,6 +457,9 @@ struct Editor {
     std::array<COLORREF, 16> customColors{};
     ColorPicker* activeColorPicker = nullptr;
     std::vector<std::wstring> presetNames;
+    HWND presetList = nullptr;
+    int presetPressed = -1;
+    bool presetShift = false;
     std::optional<Palette> presetPreview;
     StyleTooltips styleTooltips;
     std::optional<Palette> pendingPalette;
@@ -513,6 +520,7 @@ struct Editor {
         else palette = ReadPalette(Preset(DefaultPreset));
         activePalette = palette;
         std::istringstream manifest(ReadTextFile(plugin / L"Presets" / L"Palettes.txt"));
+        const auto settings = config / SettingsFile;
         std::string entry;
         SendMessageW(Control(IDC_PRESET), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Current palette"));
         while (std::getline(manifest, entry))
@@ -520,11 +528,17 @@ struct Editor {
             if (entry.ends_with('\r')) entry.pop_back();
             const auto split = entry.find('|');
             if (split == std::string::npos || split + 1 == entry.size()) continue;
-            presetNames.push_back(Wide(std::string_view(entry).substr(split + 1)));
-            const auto label = presetNames.back() + L"  (" + Wide(std::string_view(entry).substr(0, split)) + L")";
+            auto name = Wide(std::string_view(entry).substr(split + 1));
+            if (GetPrivateProfileIntW(HiddenPresetsSection, name.c_str(), 0, settings.c_str())) continue;
+            const auto label = name + L"  (" + Wide(std::string_view(entry).substr(0, split)) + L")";
             SendMessageW(Control(IDC_PRESET), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+            presetNames.push_back(std::move(name));
         }
         SendMessageW(Control(IDC_PRESET), CB_SETCURSEL, 0, 0);
+        COMBOBOXINFO presetInfo{sizeof(presetInfo)};
+        if (GetComboBoxInfo(Control(IDC_PRESET), &presetInfo) &&
+            SetWindowSubclass(presetInfo.hwndList, PresetListProc, 1, reinterpret_cast<DWORD_PTR>(this)))
+            presetList = presetInfo.hwndList;
         for (const auto& item : palette)
             SendMessageW(Control(IDC_STYLE_ID), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(item.name.c_str()));
         SendMessageW(Control(IDC_STYLE_ID), CB_SETCURSEL, 0, 0);
@@ -678,6 +692,94 @@ struct Editor {
         presetPreview = ReadPalette(Preset(presetNames[static_cast<size_t>(index - 1)]));
         UpdateStyleFields();
         Status(L"Choose Use preset to apply these colors and optionally switch Notepad++ mode.");
+    }
+
+    void RefreshPresetShift()
+    {
+        if (!presetList) return;
+        const bool pressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        if (presetShift == pressed) return;
+        presetShift = pressed;
+        InvalidateRect(presetList, nullptr, FALSE);
+    }
+
+    int PresetAt(HWND list, LPARAM coordinates) const
+    {
+        const auto hit = SendMessageW(list, LB_ITEMFROMPOINT, 0, coordinates);
+        const int row = LOWORD(hit);
+        if (HIWORD(hit) || row <= 0 || static_cast<size_t>(row) > presetNames.size()) return -1;
+        RECT bounds{};
+        if (SendMessageW(list, LB_GETITEMRECT, row, reinterpret_cast<LPARAM>(&bounds)) == LB_ERR ||
+            !PtInRect(&bounds, POINT{GET_X_LPARAM(coordinates), GET_Y_LPARAM(coordinates)})) return -1;
+        return row;
+    }
+
+    static LRESULT CALLBACK PresetListProc(HWND list, UINT message, WPARAM wParam, LPARAM lParam,
+        UINT_PTR id, DWORD_PTR data)
+    {
+        auto& self = *reinterpret_cast<Editor*>(data);
+        if (message == WM_LBUTTONDOWN)
+        {
+            self.presetPressed = (wParam & MK_SHIFT) ? self.PresetAt(list, lParam) : -1;
+            if (self.presetPressed > 0) return 0;
+        }
+        if (message == WM_LBUTTONUP && self.presetPressed > 0)
+        {
+            const auto row = std::exchange(self.presetPressed, -1);
+            if ((wParam & MK_SHIFT) && self.PresetAt(list, lParam) == row)
+                PostMessageW(self.window, RemovePresetMessage, row, 0);
+            return 0;
+        }
+        if (message == WM_NCDESTROY)
+        {
+            self.presetList = nullptr;
+            KillTimer(self.window, PresetShiftTimer);
+            RemoveWindowSubclass(list, PresetListProc, id);
+        }
+        return DefSubclassProc(list, message, wParam, lParam);
+    }
+
+    void DrawPreset(const DRAWITEMSTRUCT& draw) const
+    {
+        const bool selected = (draw.itemState & ODS_SELECTED) != 0;
+        const bool enabled = (draw.itemState & (ODS_DISABLED | ODS_GRAYED)) == 0;
+        const auto dc = draw.hDC;
+        const auto saved = SaveDC(dc);
+        FillRect(dc, &draw.rcItem, GetSysColorBrush(selected ? COLOR_HIGHLIGHT : COLOR_WINDOW));
+        if (draw.itemID != static_cast<UINT>(-1))
+        {
+            const auto length = SendMessageW(draw.hwndItem, CB_GETLBTEXTLEN, draw.itemID, 0);
+            if (length >= 0)
+            {
+                std::wstring label(static_cast<size_t>(length) + 1, L'\0');
+                SendMessageW(draw.hwndItem, CB_GETLBTEXT, draw.itemID, reinterpret_cast<LPARAM>(label.data()));
+                label.resize(static_cast<size_t>(length));
+                if (selected && presetShift && draw.itemID > 0 && !(draw.itemState & ODS_COMBOBOXEDIT))
+                    label += L" (delete)";
+                RECT bounds = draw.rcItem;
+                InflateRect(&bounds, -3, 0);
+                SetBkMode(dc, TRANSPARENT);
+                SetTextColor(dc, GetSysColor(!enabled ? COLOR_GRAYTEXT : selected ? COLOR_HIGHLIGHTTEXT : COLOR_WINDOWTEXT));
+                DrawTextW(dc, label.c_str(), -1, &bounds, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
+            }
+        }
+        if ((draw.itemState & ODS_FOCUS) && !(draw.itemState & ODS_NOFOCUSRECT))
+            DrawFocusRect(dc, &draw.rcItem);
+        RestoreDC(dc, saved);
+    }
+
+    void RemovePreset(size_t row)
+    {
+        if (!row || row > presetNames.size()) return;
+        const auto combo = Control(IDC_PRESET);
+        SendMessageW(combo, CB_SHOWDROPDOWN, FALSE, 0);
+        const auto settings = config / SettingsFile;
+        if (!WritePrivateProfileStringW(HiddenPresetsSection, presetNames[row - 1].c_str(), L"1", settings.c_str()))
+            throw std::runtime_error("Could not save the preset list.");
+        SendMessageW(combo, CB_DELETESTRING, row, 0);
+        presetNames.erase(presetNames.begin() + (row - 1));
+        ShowCurrent();
+        Status(L"Preset removed from your list.");
     }
 
     void DrawPreview(const DRAWITEMSTRUCT& draw) const
@@ -1037,6 +1139,17 @@ struct Editor {
         {
         case IDC_PRESET:
             if (event == CBN_SELCHANGE) PreviewPreset();
+            if (event == CBN_DROPDOWN && presetList)
+            {
+                RefreshPresetShift();
+                SetTimer(window, PresetShiftTimer, 60, nullptr);
+            }
+            if (event == CBN_CLOSEUP)
+            {
+                KillTimer(window, PresetShiftTimer);
+                presetShift = false;
+                presetPressed = -1;
+            }
             break;
         case IDC_USE_PRESET:
             if (presetPreview && ReplacePalette())
@@ -1121,6 +1234,13 @@ struct Editor {
 
 INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    if (message == WM_MEASUREITEM && wParam == IDC_PRESET)
+    {
+        RECT bounds{0, 0, 0, 10};
+        MapDialogRect(window, &bounds);
+        reinterpret_cast<MEASUREITEMSTRUCT*>(lParam)->itemHeight = std::max(1L, bounds.bottom);
+        return TRUE;
+    }
     auto* editor = reinterpret_cast<Editor*>(GetWindowLongPtrW(window, DWLP_USER));
     try
     {
@@ -1139,6 +1259,13 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         if (message == WM_CLOSE) { editor->Close(); return TRUE; }
         if (message == WM_TIMER && wParam == RestartTimer) { editor->CheckRestart(); return TRUE; }
         if (message == WM_TIMER && wParam == OwnerTimer) { editor->CheckOwner(); return TRUE; }
+        if (message == WM_TIMER && wParam == PresetShiftTimer) { editor->RefreshPresetShift(); return TRUE; }
+        if (message == RemovePresetMessage) { editor->RemovePreset(static_cast<size_t>(wParam)); return TRUE; }
+        if (message == WM_DRAWITEM && wParam == IDC_PRESET)
+        {
+            editor->DrawPreset(*reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
+            return TRUE;
+        }
         if (message == WM_DRAWITEM && (wParam == IDC_FOREGROUND || wParam == IDC_BACKGROUND))
         {
             editor->DrawColorButton(*reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
