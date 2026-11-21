@@ -291,8 +291,18 @@ HWND FindEditorBridge(DWORD pid)
     return nullptr;
 }
 
+EditorMode ReadEditorMode(DWORD pid)
+{
+    if (!pid) return EditorMode::Unknown;
+    const auto bridge = FindEditorBridge(pid);
+    DWORD_PTR result = 0;
+    if (!bridge || !SendMessageTimeoutW(bridge, QueryEditorModeMessage, 0, 0, SMTO_ABORTIFHUNG, 1000, &result))
+        return EditorMode::Unknown;
+    return static_cast<EditorMode>(result);
+}
+
 constexpr const wchar_t* StyleDescriptions[] = {
-    L"Ordinary text and the editor page background.",
+    L"Ordinary text and the editor page. Syntax styles inherit this background unless they have an override.",
     L"Comment lines beginning with a semicolon.",
     L"Section headers such as [Rainmeter].",
     L"Recognized option names such as FontColor.",
@@ -436,15 +446,14 @@ private:
 struct Editor {
     Path config, plugin, nppSettings;
     HWND window = nullptr;
-    Palette palette;
+    Palette palette, activePalette;
     std::vector<std::string> words;
     size_t group = 0, style = 0;
-    bool wordsDirty = false, paletteDirty = false, updating = false;
+    bool wordsDirty = false, updating = false;
     std::array<COLORREF, 16> customColors{};
     ColorPicker* activeColorPicker = nullptr;
     std::vector<std::wstring> presetNames;
     std::optional<Palette> presetPreview;
-    std::optional<bool> offeredMode;
     StyleTooltips styleTooltips;
     std::optional<Palette> pendingPalette;
     std::vector<HANDLE> closing;
@@ -502,6 +511,7 @@ struct Editor {
         SendMessageW(Control(IDC_FIND), EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Find a term"));
         if (std::filesystem::exists(ActivePalette())) palette = ReadPalette(ActivePalette());
         else palette = ReadPalette(Preset(DefaultPreset));
+        activePalette = palette;
         std::istringstream manifest(ReadTextFile(plugin / L"Presets" / L"Palettes.txt"));
         std::string entry;
         SendMessageW(Control(IDC_PRESET), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Current palette"));
@@ -628,35 +638,25 @@ struct Editor {
         const auto& shown = presetPreview ? *presetPreview : palette;
         const auto& item = shown[style];
         SetDlgItemTextW(window, IDC_FOREGROUND, (L"Foreground #" + ColorCode(item.foreground)).c_str());
-        SetDlgItemTextW(window, IDC_BACKGROUND, (L"Background #" + ColorCode(item.background)).c_str());
-        const bool dark = IsDark(shown[Default].background);
-        if (offeredMode != dark)
-        {
-            offeredMode = dark;
-            CheckDlgButton(window, IDC_MATCH_MODE, BST_UNCHECKED);
-            SetDlgItemTextW(window, IDC_MATCH_MODE, dark ?
-                L"Also switch Notepad++ to dark mode" : L"Also switch Notepad++ to light mode");
-        }
+        const auto label = style != Default && !(ColorFlags(item) & 2) ? L"Default #" : L"Background #";
+        SetDlgItemTextW(window, IDC_BACKGROUND, (label + ColorCode(item.background)).c_str());
         UpdatePaletteActions();
         InvalidateRect(Control(IDC_FOREGROUND), nullptr, TRUE);
         InvalidateRect(Control(IDC_BACKGROUND), nullptr, TRUE);
         InvalidateRect(Control(IDC_PREVIEW), nullptr, TRUE);
     }
 
+    bool PaletteDirty() const { return palette != activePalette; }
+
     void UpdatePaletteActions() const
     {
         const bool editingPalette = !presetPreview && !pendingPalette;
-        for (const int id : {IDC_FOREGROUND, IDC_BACKGROUND, IDC_FONT, IDC_INHERIT_FONT, IDC_EXPORT, IDC_MATCH_MODE})
+        for (const int id : {IDC_FOREGROUND, IDC_BACKGROUND, IDC_FONT,
+                IDC_EXPORT, IDC_ALL_BACKGROUNDS})
             EnableWindow(Control(id), editingPalette);
         EnableWindow(Control(IDC_USE_PRESET), presetPreview.has_value() && !pendingPalette);
         EnableWindow(Control(IDC_APPLY), !presetPreview);
-        if (!pendingPalette)
-        {
-            const bool restart = IsDlgButtonChecked(window, IDC_MATCH_MODE) == BST_CHECKED;
-            SetDlgItemTextW(window, IDC_APPLY, restart ? L"Apply and restart" : L"Apply");
-            SetDlgItemTextW(window, IDC_APPLY_HINT, restart ?
-                L"Your open files can be saved before restart." : L"Updates open Rainmeter tabs.");
-        }
+        if (!pendingPalette) SetDlgItemTextW(window, IDC_APPLY, PaletteDirty() ? L"Apply *" : L"Apply");
     }
 
     void ShowCurrent()
@@ -733,21 +733,26 @@ struct Editor {
         RestoreDC(draw.hDC, saved);
     }
 
-    void PickColor(bool foreground)
+    void PickColor(bool foreground, bool allBackgrounds = false)
     {
-        auto& item = palette[style];
-        auto& selected = foreground ? item.foreground : item.background;
-        ColorPicker picker{foreground ? L"Foreground color" : L"Background color", selected, customColors};
+        const auto index = allBackgrounds ? static_cast<size_t>(Default) : style;
+        auto& item = palette[index];
+        const auto title = allBackgrounds ? L"Background for all styles" :
+            foreground ? L"Foreground color" : L"Background color";
+        ColorPicker picker{title, foreground ? item.foreground : item.background, customColors};
         activeColorPicker = &picker;
         const auto result = DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_COLOR_PICKER),
             window, ColorPicker::Dialog, reinterpret_cast<LPARAM>(&picker));
         activeColorPicker = nullptr;
         if (result == IDOK)
         {
-            selected = picker.color;
-            const int active = item.colorStyle.empty() ? 3 : _wtoi(item.colorStyle.c_str());
-            item.colorStyle = std::to_wstring(active | (foreground ? 1 : 2));
-            paletteDirty = true;
+            if (foreground)
+            {
+                item.foreground = picker.color;
+                const auto flags = ColorFlags(item);
+                if (!(flags & 1)) item.colorStyle = std::to_wstring(flags | 1);
+            }
+            else SetBackground(palette, index, picker.color, allBackgrounds);
             ShowCurrent();
         }
     }
@@ -770,15 +775,14 @@ struct Editor {
         if (choose.rgbColors != item.foreground)
         {
             item.foreground = choose.rgbColors;
-            item.colorStyle = std::to_wstring((item.colorStyle.empty() ? 3 : _wtoi(item.colorStyle.c_str())) | 1);
+            item.colorStyle = std::to_wstring(ColorFlags(item) | 1);
         }
-        paletteDirty = true;
         ShowCurrent();
     }
 
     bool ReplacePalette() const
     {
-        return !paletteDirty || MessageBoxW(window, L"Replace the palette you are editing?",
+        return !PaletteDirty() || MessageBoxW(window, L"Replace the palette you are editing?",
             L"RainSyntax Settings", MB_OKCANCEL | MB_ICONQUESTION) == IDOK;
     }
 
@@ -786,7 +790,7 @@ struct Editor {
     {
         if (!ReplacePalette()) return;
         palette = ReadPalette(path);
-        paletteDirty = !active;
+        if (active) activePalette = palette;
         ShowCurrent();
         Status(active ? L"Loaded the active palette." : L"Palette loaded. Edit or apply it when ready.");
     }
@@ -857,7 +861,6 @@ struct Editor {
         try
         {
             SaveActivePalette(replacement);
-            paletteDirty = false;
             try { SetNotepadMode(nppSettings / L"config.xml", IsDark(replacement[Default].background)); }
             catch (const std::exception& error)
             {
@@ -946,7 +949,8 @@ struct Editor {
         const auto model = ActivePalette();
         SavePalette(std::filesystem::exists(model) ? model : Preset(DefaultPreset),
             config / LivePaletteFile, replacement);
-        paletteDirty = false;
+        activePalette = replacement;
+        UpdatePaletteActions();
     }
 
     void ApplyLive()
@@ -978,11 +982,21 @@ struct Editor {
             Status(L"Restart canceled. The palette was left as it was.");
             return;
         }
-        if (IsDlgButtonChecked(window, IDC_MATCH_MODE) != BST_CHECKED)
+        const auto currentMode = ReadEditorMode(ownerId);
+        const bool dark = IsDark(palette[Default].background);
+        const auto paletteMode = dark ? EditorMode::Dark : EditorMode::Light;
+        if (currentMode == EditorMode::Unknown || currentMode == paletteMode)
         {
             ApplyLive();
             return;
         }
+        const auto prompt = dark ?
+            L"Switch Notepad++ to dark mode and restart?\n\nChoose No to apply the palette and keep the current mode." :
+            L"Switch Notepad++ to light mode and restart?\n\nChoose No to apply the palette and keep the current mode.";
+        const auto choice = MessageBoxW(window, prompt, L"Match Notepad++ mode",
+            MB_YESNOCANCEL | MB_ICONQUESTION | MB_DEFBUTTON2);
+        if (choice == IDNO) ApplyLive();
+        if (choice != IDYES) return;
         const auto program = Notepad();
         NotepadWindows targets(program);
         EnumWindows(NotepadWindows::Find, reinterpret_cast<LPARAM>(&targets));
@@ -1010,7 +1024,7 @@ struct Editor {
 
     void Close()
     {
-        if ((wordsDirty || paletteDirty) && MessageBoxW(window,
+        if ((wordsDirty || PaletteDirty()) && MessageBoxW(window,
             L"Close settings with unapplied vocabulary or palette changes?", L"RainSyntax Settings",
             MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
         if (pendingPalette) CancelRestart();
@@ -1028,11 +1042,8 @@ struct Editor {
             if (presetPreview && ReplacePalette())
             {
                 palette = *presetPreview;
-                paletteDirty = true;
                 ShowCurrent();
-                Status(IsDark(palette[Default].background) ?
-                    L"Dark preset ready. You can also switch Notepad++ to dark mode." :
-                    L"Light preset ready. You can also switch Notepad++ to light mode.");
+                Status(L"Preset ready. Choose Apply to use it.");
             }
             break;
         case IDC_GROUP:
@@ -1067,15 +1078,9 @@ struct Editor {
             break;
         case IDC_FOREGROUND: PickColor(true); break;
         case IDC_BACKGROUND: PickColor(false); break;
+        case IDC_ALL_BACKGROUNDS: PickColor(false, true); break;
         case IDC_FONT: PickFont(); break;
-        case IDC_INHERIT_FONT:
-            palette[style].family.clear();
-            palette[style].size.clear();
-            paletteDirty = true;
-            ShowCurrent();
-            break;
         case IDC_ACTIVE: Load(ActivePalette(), true); break;
-        case IDC_MATCH_MODE: UpdatePaletteActions(); break;
         case IDC_IMPORT:
             if (const auto path = Browse(false); !path.empty()) Load(path, false);
             break;
@@ -1090,8 +1095,7 @@ struct Editor {
                     break;
                 }
                 SavePalette(Preset(DefaultPreset), path, palette);
-                paletteDirty = false;
-                Status(L"Palette saved.");
+                Status(PaletteDirty() ? L"Palette exported. Choose Apply to update Notepad++." : L"Palette exported.");
             }
             break;
         case IDC_APPLY: Apply(); break;

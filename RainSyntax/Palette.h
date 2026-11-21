@@ -26,8 +26,31 @@ struct StyleSettings {
     COLORREF foreground = RGB(0, 0, 0);
     COLORREF background = RGB(255, 255, 255);
     unsigned emphasis = 0;
+    bool operator==(const StyleSettings&) const = default;
 };
 using Palette = std::array<StyleSettings, StyleCount>;
+
+inline int ColorFlags(const StyleSettings& style)
+{
+    return style.colorStyle.empty() ? 3 : _wtoi(style.colorStyle.c_str());
+}
+
+inline void SetBackground(Palette& palette, size_t index, COLORREF background, bool replaceOverrides)
+{
+    auto& selected = palette[index];
+    selected.background = background;
+    const auto selectedFlags = ColorFlags(selected);
+    if (!(selectedFlags & 2)) selected.colorStyle = std::to_wstring(selectedFlags | 2);
+    if (index != Default) return;
+    for (size_t i = Default + 1; i < palette.size(); ++i)
+    {
+        auto& style = palette[i];
+        const auto flags = ColorFlags(style);
+        if (!replaceOverrides && (flags & 2)) continue;
+        style.background = background;
+        style.colorStyle = std::to_wstring(flags & ~2);
+    }
+}
 
 inline std::string Utf8(std::wstring_view text)
 {
@@ -116,6 +139,7 @@ inline Palette ReadPalette(const std::filesystem::path& path)
 {
     const auto xml = OpenXml(path);
     Palette palette;
+    std::array<std::optional<COLORREF>, StyleCount> backgrounds;
     const auto seen = ForStyles(xml.Get(), [&](size_t i, IXMLDOMElement* element) {
         auto& style = palette[i];
         style.name = Attribute(element, L"name");
@@ -123,7 +147,7 @@ inline Palette ReadPalette(const std::filesystem::path& path)
         style.size = Attribute(element, L"fontSize");
         style.colorStyle = Attribute(element, L"colorStyle");
         style.foreground = ColorFrom(Attribute(element, L"fgColor"), RGB(0, 0, 0));
-        style.background = ColorFrom(Attribute(element, L"bgColor"), RGB(255, 255, 255));
+        backgrounds[i] = ParseHexColor(Attribute(element, L"bgColor"));
         style.emphasis = wcstoul(Attribute(element, L"fontStyle").c_str(), nullptr, 10) & 7;
     });
     constexpr struct {
@@ -142,7 +166,21 @@ inline Palette ReadPalette(const std::filesystem::path& path)
         {L"URL", L"095C94", L"90D1FF", 0},
     };
     static_assert(std::size(addedStyles) == StyleCount - Red);
-    const auto& page = palette[Default];
+    auto& page = palette[Default];
+    page.background = backgrounds[Default].value_or(RGB(255, 255, 255));
+    for (size_t i = Default + 1; i < palette.size(); ++i)
+    {
+        auto& style = palette[i];
+        const auto flags = ColorFlags(style);
+        // Older palettes stored the page color in each style without an override.
+        if (backgrounds[i] && (flags & 2) && (!style.colorStyle.empty() || *backgrounds[i] != page.background))
+            style.background = *backgrounds[i];
+        else
+        {
+            style.background = page.background;
+            style.colorStyle = std::to_wstring(flags & ~2);
+        }
+    }
     const bool dark = IsDark(page.background);
     for (size_t i = Red; i < palette.size(); ++i)
     {
@@ -152,7 +190,7 @@ inline Palette ReadPalette(const std::filesystem::path& path)
         palette[i].name = defaults.name;
         palette[i].foreground = ColorFrom(dark ? defaults.dark : defaults.light, page.foreground);
         palette[i].emphasis = defaults.emphasis;
-        palette[i].colorStyle.clear();
+        palette[i].colorStyle = L"1";
     }
     return palette;
 }

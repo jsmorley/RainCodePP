@@ -42,13 +42,13 @@ A bang on its own line in a skin uses the **Invalid Value** style, with or witho
 
 ## 4. Change how RainSyntax looks
 
-Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. There are six light palettes, six dark palettes, and **JSMorley**, based on Jeffrey Morley's RainLexer colors.
+Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. There are seven light palettes, including **Ivory**, six dark palettes, and **JSMorley**, based on Jeffrey Morley's RainLexer colors.
 
 - **Use preset** copies the preview into your editable palette.
-- In **Set style for syntax types**, hover over a choice for a brief description. Select a type to change its foreground, background, font, size, bold, italic, or underline. **Inherit** returns its font face and size to the editor defaults. The **Default** background fills the editor page. Individual syntax categories can use their own backgrounds.
+- In **Set style for syntax types**, hover over a choice for a brief description. Select a type to change its foreground, background, font, size, bold, italic, or underline. Changing the **Default** background updates the blank area of the Rainmeter tab and every style that inherits it. Selecting an individual style and choosing a background creates an override. Use **Set all backgrounds** to clear all overrides and set one background for the entire tab.
 - Click **Foreground** or **Background** to paste a hex color such as `#4681AD` or `4681AD`. The swatch previews the color before you click **OK**. **Browse colors** opens the visual picker.
 - **Save palette as** exports your palette to XML. **Load palette** opens a saved palette for editing.
-- **Apply** saves the palette and updates Rainmeter tabs immediately. If you check **Also switch Notepad++ to dark mode** or its light equivalent, the button becomes **Apply and restart**. This selects a manual mode instead of Follow Windows. Save any open files if Notepad++ prompts you before reopening your tabs.
+- **Apply** saves the palette and updates Rainmeter tabs immediately. **Apply \*** indicates that the palette has unapplied changes. If the palette and Notepad++ use different light or dark modes, choose **Yes** to switch to the matching mode and restart, **No** to apply the palette with the current mode, or **Cancel** to keep editing. Switching selects a manual mode instead of Follow Windows. Save any open files if Notepad++ prompts you before reopening your tabs.
 
 The **Notepad++ Style Configurator** link at the bottom of the sidebar opens the built-in editor for global styles, other languages, and file extensions.
 

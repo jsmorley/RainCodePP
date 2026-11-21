@@ -56,10 +56,24 @@ JSMORLEY = [
     ("516AA1", 0), ("AC4D1C", 1),
 ]
 
+IVORY = [
+    ("202833", 0), ("2E6036", 2), ("923B0A", 1), ("244E8A", 1),
+    ("505A6D", 0), ("A21D36", 1), ("345437", 0), ("006268", 1),
+    ("933C16", 1), ("81305C", 0), ("955016", 0), ("565C75", 2),
+    ("53664B", 2), ("73526E", 2), ("7A3167", 0), ("4A6276", 1),
+    ("453A8B", 0), ("7A306F", 0), ("106A70", 0), ("3F5263", 0),
+    ("30604F", 0), ("4A5263", 1), ("613A8D", 1), ("005F73", 1),
+    ("795423", 0), ("5D6074", 2), ("7D3B75", 0), ("165E62", 1),
+    ("365581", 0), ("884A15", 1), ("9A2F43", 0), ("24643A", 0),
+    ("21548C", 0), ("694683", 0), ("914419", 1), ("096472", 1),
+    ("63358B", 1), ("105784", 4),
+]
+
 # Background followed by ink, muted text, comment, blue, teal, purple, orange,
 # ochre, and error accents. Each palette uses all nine accents consistently.
 PALETTES = [
     ("Light", "Clear Skies", "FAFBFC", None),
+    ("Light", "Ivory", "FFFFFC", None),
     ("Light", "Morning Fog", "EEF1F4", "273240 53616E 4F685D 305474 26676C 605080 85452F 73551C A12846"),
     ("Light", "Paper Lantern", "F9F1E0", "33281F 64564D 506442 29587A 28675A 744770 8F4227 755413 A52938"),
     ("Light", "Tidal Pool", "EBF7F6", "203844 485F68 466956 1D5C83 0A665B 65467F 8D4628 73571D 9B2B4C"),
@@ -88,6 +102,7 @@ def main():
     config = root / "Config/Presets"
     config.mkdir(exist_ok=True)
     for family, theme, background, accents in PALETTES:
+        style_overrides = {"Ivory": IVORY, "JSMorley": JSMORLEY}.get(theme, ())
         document = ET.Element("NotepadPlus")
         languages = ET.SubElement(document, "Languages")
         ET.SubElement(languages, "Language", name="Rainmeter5", ext="ini inc",
@@ -100,9 +115,9 @@ def main():
             face = size = ""
             if accents and id_ < len(ROLES):
                 color = accents.split()[ROLES[id_]]
+            if id_ < len(style_overrides):
+                color, flags = style_overrides[id_]
             if theme == "JSMorley":
-                if id_ < len(JSMORLEY):
-                    color, flags = JSMORLEY[id_]
                 face = "DejaVu Sans Mono"
                 size = "14"
             if theme != "JSMorley" or id_ >= len(JSMORLEY):

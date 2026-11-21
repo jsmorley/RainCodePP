@@ -136,15 +136,17 @@ void ApplyLiveStyles(HWND view, LRESULT baseBackground)
     const auto baseSize = Editor(view, SCI_STYLEGETSIZE, STYLE_DEFAULT);
     std::string baseFont(static_cast<size_t>(Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT)) + 1, '\0');
     Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT, reinterpret_cast<LPARAM>(baseFont.data()));
+    const auto& page = (*livePalette)[Default];
+    const auto pageBackground = (ColorFlags(page) & 2) ? page.background : baseBackground;
     for (int i = 0; i < StyleCount; ++i)
     {
         const auto& style = (*livePalette)[i];
         const auto id = ScintillaStyle(i);
-        const unsigned colors = style.colorStyle.empty() ? 3 : _wtoi(style.colorStyle.c_str());
+        const auto colors = ColorFlags(style);
         const auto font = style.family.empty() ? baseFont : Utf8(style.family);
         const int size = _wtoi(style.size.c_str());
         Editor(view, SCI_STYLESETFORE, id, (colors & 1) ? style.foreground : baseForeground);
-        Editor(view, SCI_STYLESETBACK, id, (colors & 2) ? style.background : baseBackground);
+        Editor(view, SCI_STYLESETBACK, id, (colors & 2) ? style.background : pageBackground);
         Editor(view, SCI_STYLESETFONT, id, reinterpret_cast<LPARAM>(font.c_str()));
         Editor(view, SCI_STYLESETSIZE, id, size > 0 ? size : baseSize);
         Editor(view, SCI_STYLESETBOLD, id, !!(style.emphasis & 1));
@@ -334,7 +336,7 @@ FuncItem functions[] = {
     {L"Correct capitalization", ToggleCorrection, 0, false, nullptr},
     {L"Correct obvious typos", ToggleTypos, 0, false, nullptr},
     {L"Settings sidebar", TogglePanel, 0, false, nullptr},
-    {L"Edit vocabulary and palettes...", OpenSettings, 0, false, nullptr},
+    {L"Edit vocabulary and palettes", OpenSettings, 0, false, nullptr},
     {L"Help", OpenHelp, 0, false, nullptr},
     {L"About RainSyntax", About, 0, false, nullptr}
 };
@@ -446,6 +448,11 @@ HMODULE PluginModule()
 
 LRESULT CALLBACK RestartSessionWindow(HWND window, UINT message, WPARAM sender, LPARAM data)
 {
+    if (message == QueryEditorModeMessage)
+    {
+        const bool dark = SendMessageW(npp._nppHandle, NPPM_ISDARKMODEENABLED, 0, 0) != 0;
+        return static_cast<LRESULT>(dark ? EditorMode::Dark : EditorMode::Light);
+    }
     if (message == ReloadLivePaletteMessage)
     {
         if (!ReloadLivePalette()) return FALSE;
@@ -501,8 +508,7 @@ std::filesystem::path PluginDirectory()
 void RefreshHelp()
 {
     if (!helpText) return;
-    constexpr UINT IsNotepadDark = NPPMSG + 107;
-    const bool dark = SendMessageW(npp._nppHandle, IsNotepadDark, 0, 0) != 0;
+    const bool dark = SendMessageW(npp._nppHandle, NPPM_ISDARKMODEENABLED, 0, 0) != 0;
     const auto manual = ReadTextFile(PluginDirectory() / L"manual.md");
     RenderMarkdown(helpText, manual.empty()
         ? "# RainSyntax Help\n\nThe installed manual.md could not be opened. Run RainSyntax setup to restore it."
