@@ -117,7 +117,10 @@ def main():
                 color = accents.split()[ROLES[id_]]
             if id_ < len(style_overrides):
                 color, flags = style_overrides[id_]
-            if theme == "JSMorley":
+            if theme == "Ivory":
+                face = "Tahoma"
+                size = "14"
+            elif theme == "JSMorley":
                 face = "DejaVu Sans Mono"
                 size = "14"
             if theme != "JSMorley" or id_ >= len(JSMORLEY):

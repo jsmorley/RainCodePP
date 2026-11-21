@@ -45,17 +45,6 @@ constexpr std::string_view PreviewLines[] = {
     "LeftMouseUpAction=[!SetOption Label Text [#Title]]",
 };
 
-std::wstring Wide(std::string_view text)
-{
-    if (text.empty()) return {};
-    const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
-        static_cast<int>(text.size()), nullptr, 0);
-    std::wstring result(count, L'\0');
-    if (count) MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
-        static_cast<int>(text.size()), result.data(), count);
-    return result;
-}
-
 std::wstring WindowText(HWND window)
 {
     std::wstring value(GetWindowTextLengthW(window) + 1, L'\0');
@@ -447,8 +436,31 @@ private:
     }
 };
 
+struct EditorFont {
+    std::wstring family = L"Consolas";
+    int points = 10;
+    int zoom = 0;
+
+    LOGFONTW Resolve(const StyleSettings& style, UINT dpi, bool preview) const
+    {
+        const int customSize = _wtoi(style.size.c_str());
+        const int baseSize = customSize > 0 ? customSize : points;
+        const auto zoomedSize = static_cast<long long>(baseSize) + zoom;
+        const int size = preview ? static_cast<int>(std::clamp(zoomedSize, 2LL, 32767LL)) :
+            std::clamp(baseSize, 5, 72);
+        LOGFONTW font{};
+        font.lfHeight = -MulDiv(size, dpi, 72);
+        font.lfWeight = style.emphasis & 1 ? FW_BOLD : FW_NORMAL;
+        font.lfItalic = (style.emphasis & 2) != 0;
+        font.lfUnderline = (style.emphasis & 4) != 0;
+        wcsncpy_s(font.lfFaceName, style.family.empty() ? family.c_str() : style.family.c_str(), _TRUNCATE);
+        return font;
+    }
+};
+
 struct Editor {
     Path config, plugin, nppSettings;
+    EditorFont editorFont;
     HWND window = nullptr;
     Palette palette, activePalette;
     std::vector<std::string> words;
@@ -470,8 +482,9 @@ struct Editor {
     DWORD ownerId = 0;
     ULONGLONG restartDeadline = 0;
 
-    Editor(Path settings, Path home, Path notepadSettings, DWORD owner) :
-        config(std::move(settings)), plugin(std::move(home)), nppSettings(std::move(notepadSettings)), ownerId(owner) {}
+    Editor(Path settings, Path home, Path notepadSettings, DWORD owner, EditorFont font) :
+        config(std::move(settings)), plugin(std::move(home)), nppSettings(std::move(notepadSettings)),
+        editorFont(std::move(font)), ownerId(owner) {}
     ~Editor()
     {
         for (HANDLE process : closing) CloseHandle(process);
@@ -596,22 +609,6 @@ struct Editor {
         Status(L"");
     }
 
-    LOGFONTW LogFont(const StyleSettings& item, const StyleSettings& defaults, bool preview = false) const
-    {
-        const UINT dpi = GetDpiForWindow(window);
-        const auto& sizeText = item.size.empty() ? defaults.size : item.size;
-        const int points = _wtoi(sizeText.c_str());
-        const int size = points > 0 ? std::clamp(points, 5, preview ? 18 : 72) : 10;
-        const auto& family = item.family.empty() ? defaults.family : item.family;
-        LOGFONTW font{};
-        font.lfHeight = -MulDiv(size, dpi, 72);
-        font.lfWeight = item.emphasis & 1 ? FW_BOLD : FW_NORMAL;
-        font.lfItalic = (item.emphasis & 2) != 0;
-        font.lfUnderline = (item.emphasis & 4) != 0;
-        wcsncpy_s(font.lfFaceName, family.empty() ? L"Consolas" : family.c_str(), _TRUNCATE);
-        return font;
-    }
-
     void DrawColorButton(const DRAWITEMSTRUCT& draw) const
     {
         const auto& shown = presetPreview ? *presetPreview : palette;
@@ -626,7 +623,7 @@ struct Editor {
         FrameRect(dc, &draw.rcItem, brush);
 
         // Keep the button label readable at the control's fixed height.
-        auto font = LogFont(item, shown[Default]);
+        auto font = editorFont.Resolve(item, GetDpiForWindow(window), false);
         font.lfHeight = -MulDiv(9, GetDpiForWindow(window), 72);
         const HFONT labelFont = CreateFontIndirectW(&font);
         if (labelFont) SelectObject(dc, labelFont);
@@ -791,8 +788,9 @@ struct Editor {
         const int saved = SaveDC(draw.hDC);
         IntersectClipRect(draw.hDC, draw.rcItem.left, draw.rcItem.top, draw.rcItem.right, draw.rcItem.bottom);
         SetBkMode(draw.hDC, OPAQUE);
-        SetTextAlign(draw.hDC, TA_LEFT | TA_TOP);
+        SetTextAlign(draw.hDC, TA_LEFT | TA_BASELINE);
         std::array<HFONT, StyleCount> fonts{};
+        std::array<TEXTMETRICW, StyleCount> metrics{};
         const auto original = GetCurrentObject(draw.hDC, OBJ_FONT);
         const auto dpi = GetDpiForWindow(window);
         const int margin = MulDiv(9, dpi, 96);
@@ -801,10 +799,15 @@ struct Editor {
         for (const auto line : PreviewLines)
         {
             int x = draw.rcItem.left + margin;
-            int height = 0;
             if (const auto section = SectionName(line); !section.empty())
                 variables = section == "Variables";
             const auto runs = StyleLine(line, variables);
+            struct Run {
+                size_t start, end;
+                int style;
+            };
+            std::vector<Run> segments;
+            LONG ascent = 0, descent = 0;
             for (size_t i = 0; i < line.size();)
             {
                 size_t end = i + 1;
@@ -813,22 +816,31 @@ struct Editor {
                 const auto& item = colors[styleId];
                 if (!fonts[styleId])
                 {
-                    const auto font = LogFont(item, colors[Default], true);
+                    const auto font = editorFont.Resolve(item, dpi, true);
                     fonts[styleId] = CreateFontIndirectW(&font);
+                    SelectObject(draw.hDC, fonts[styleId] ? fonts[styleId] : original);
+                    GetTextMetricsW(draw.hDC, &metrics[styleId]);
                 }
-                if (fonts[styleId]) SelectObject(draw.hDC, fonts[styleId]);
-                const auto value = Wide(line.substr(i, end - i));
+                ascent = std::max(ascent, metrics[styleId].tmAscent);
+                descent = std::max(descent, metrics[styleId].tmDescent);
+                segments.push_back({i, end, styleId});
+                i = end;
+            }
+            for (const auto& segment : segments)
+            {
+                const auto& item = colors[segment.style];
+                const auto font = fonts[segment.style];
+                SelectObject(draw.hDC, font ? font : original);
+                const auto value = Wide(line.substr(segment.start, segment.end - segment.start));
                 const auto count = static_cast<int>(value.size());
                 SetTextColor(draw.hDC, item.foreground);
                 SetBkColor(draw.hDC, item.background);
-                TextOutW(draw.hDC, x, y, value.data(), count);
+                TextOutW(draw.hDC, x, y + ascent, value.data(), count);
                 SIZE measured{};
                 GetTextExtentPoint32W(draw.hDC, value.data(), count, &measured);
-                height = std::max(height, static_cast<int>(measured.cy));
                 x += measured.cx;
-                i = end;
             }
-            y += height + MulDiv(2, dpi, 96);
+            y += ascent + descent;
         }
         SelectObject(draw.hDC, original);
         for (auto font : fonts) if (font) DeleteObject(font);
@@ -861,7 +873,7 @@ struct Editor {
 
     void PickFont()
     {
-        auto font = LogFont(palette[style], palette[Default]);
+        auto font = editorFont.Resolve(palette[style], GetDpiForWindow(window), false);
         CHOOSEFONTW choose{sizeof(choose)};
         choose.hwndOwner = window;
         choose.lpLogFont = &font;
@@ -1300,6 +1312,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
     Path config;
     Path nppSettings;
     DWORD owner = 0;
+    EditorFont editorFont;
     if (arguments && count >= 3 && count % 2 != 0)
     {
         for (int i = 1; i + 1 < count; i += 2)
@@ -1308,6 +1321,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
             if (name == L"--config") config = arguments[i + 1];
             else if (name == L"--npp-settings") nppSettings = arguments[i + 1];
             else if (name == L"--owner") owner = wcstoul(arguments[i + 1], nullptr, 10);
+            else if (name == L"--editor-font") editorFont.family = arguments[i + 1];
+            else if (name == L"--editor-size")
+            {
+                const int points = _wtoi(arguments[i + 1]);
+                if (points > 0) editorFont.points = points;
+            }
+            else if (name == L"--editor-zoom") editorFont.zoom = _wtoi(arguments[i + 1]);
         }
     }
     else if (count == 1)
@@ -1329,7 +1349,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
             if (!directory.has_filename()) directory = directory.parent_path();
             nppSettings = directory.parent_path().parent_path();
         }
-        Editor editor(config, plugin, nppSettings, owner);
+        Editor editor(config, plugin, nppSettings, owner, std::move(editorFont));
         result = static_cast<int>(DialogBoxParamW(instance, MAKEINTRESOURCEW(IDD_EDITOR), nullptr,
             Dialog, reinterpret_cast<LPARAM>(&editor)));
     }

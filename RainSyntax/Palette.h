@@ -63,6 +63,17 @@ inline std::string Utf8(std::wstring_view text)
     return result;
 }
 
+inline std::wstring Wide(std::string_view text)
+{
+    if (text.empty()) return {};
+    const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+        static_cast<int>(text.size()), nullptr, 0);
+    std::wstring result(count, L'\0');
+    if (count) MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+        static_cast<int>(text.size()), result.data(), count);
+    return result;
+}
+
 inline std::optional<COLORREF> ParseHexColor(std::wstring_view value)
 {
     if (value.size() != 6 || !std::all_of(value.begin(), value.end(), [](wchar_t ch) { return !!iswxdigit(ch); }))

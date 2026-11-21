@@ -130,12 +130,21 @@ bool ReloadLivePalette()
     return loaded;
 }
 
+std::string EditorFontFamily(HWND view)
+{
+    const auto length = Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT);
+    if (length <= 0) return {};
+    std::string font(static_cast<size_t>(length) + 1, '\0');
+    Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT, reinterpret_cast<LPARAM>(font.data()));
+    font.resize(static_cast<size_t>(length));
+    return font;
+}
+
 void ApplyLiveStyles(HWND view, LRESULT baseBackground)
 {
     const auto baseForeground = Editor(view, SCI_STYLEGETFORE, STYLE_DEFAULT);
     const auto baseSize = Editor(view, SCI_STYLEGETSIZE, STYLE_DEFAULT);
-    std::string baseFont(static_cast<size_t>(Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT)) + 1, '\0');
-    Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT, reinterpret_cast<LPARAM>(baseFont.data()));
+    const auto baseFont = EditorFontFamily(view);
     const auto& page = (*livePalette)[Default];
     const auto pageBackground = (ColorFlags(page) & 2) ? page.background : baseBackground;
     for (int i = 0; i < StyleCount; ++i)
@@ -592,6 +601,14 @@ void OpenSettings()
     {
         auto parameters = L"--config \"" + (configPath / L".").wstring() + L"\" --owner " +
             std::to_wstring(GetCurrentProcessId());
+        if (const auto view = ActiveView())
+        {
+            const auto family = Wide(EditorFontFamily(view));
+            if (!family.empty() && family.find(L'"') == std::wstring::npos && !family.ends_with(L'\\'))
+                parameters += L" --editor-font \"" + family + L"\"";
+            parameters += L" --editor-size " + std::to_wstring(Editor(view, SCI_STYLEGETSIZE, STYLE_DEFAULT));
+            parameters += L" --editor-zoom " + std::to_wstring(Editor(view, SCI_GETZOOM));
+        }
         // Public message added after the headers bundled with the original RainLexer.
         constexpr UINT GetNotepadSettingsPath = NPPMSG + 119;
         std::array<wchar_t, 32768> activeSettings{};

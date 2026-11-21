@@ -42,7 +42,7 @@ A bang on its own line in a skin uses the **Invalid Value** style, with or witho
 
 ## 4. Change how RainSyntax looks
 
-Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. There are seven light palettes, including **Ivory**, six dark palettes, and **JSMorley**, based on Jeffrey Morley's RainLexer colors.
+Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. The preview uses each syntax style's font settings, or the active Notepad++ editor's default font and size where the palette leaves them blank. It also reflects the editor's zoom when you open Settings. There are seven light palettes, including **Ivory** with Tahoma 14, six dark palettes, and **JSMorley**, based on Jeffrey Morley's RainLexer colors.
 
 To remove a preset from your dropdown, hold **Shift** while it is highlighted and click the entry marked **(delete)**. The change applies to your profile and survives upgrades. To restore the entry, close RainSyntax Settings and remove that preset's line from the `[HiddenPresets]` section of `RainSyntax-settings.ini`.
 
