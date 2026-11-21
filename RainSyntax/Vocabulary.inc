@@ -170,3 +170,20 @@ vdmeasuretype=currentdesktop vdmeasuretype=desktopcount vdmeasuretype=switchdesk
 ChangeZPos Execute LsBoxHook PluginBang
 )terms",
 };
+
+constexpr std::string_view SkinBangTargets = R"terms(
+ActionTimer:Execute ActionTimer:Stop AddBlur Audio:Mute Audio:SetOutputIndex Audio:SetVolume Audio:ToggleMute Audio:Unmute
+AutoSelectScreen ChangeZPos ClearMouseAction ClearMouseActionGroup ClickThrough CommandMeasure CommandMeasureGroup DisableMeasure
+DisableMeasureGroup DisableMouseAction DisableMouseActionGroup Draggable EnableMeasure EnableMeasureGroup EnableMouseAction EnableMouseActionGroup
+FadeDuration ForceEnableVisibleMode Hide HideBlur HideFade HideMeter HideMeterGroup KeepOnScreen
+Loop:Reset Mouse:StartCapture Mouse:StopCapture Move MoveMeter NowPlaying:ClosePlayer NowPlaying:Next NowPlaying:OpenPlayer
+NowPlaying:Pause NowPlaying:Play NowPlaying:Previous NowPlaying:SetPosition NowPlaying:SetRating NowPlaying:SetRepeat NowPlaying:SetShuffle NowPlaying:SetVolume
+NowPlaying:Stop NowPlaying:TogglePlay NowPlaying:TogglePlayer PauseMeasure PauseMeasureGroup PluginBang RecycleManager:EmptyBin RecycleManager:EmptyBinSilent
+RecycleManager:OpenBin Redraw Refresh RemoveBlur RunCommand:Close RunCommand:Kill RunCommand:Run SetAnchor
+SetOption SetOptionGroup SetTransparency SetUpdate SetVariable SetZoomFactor Show ShowBlur
+ShowFade ShowMeter ShowMeterGroup SkinCustomMenu SnapEdges TextEdit:Clear TextEdit:Dismiss TextEdit:Focus
+TextEdit:Reset TextEdit:ResetScroll TextEdit:ScrollByLine TextEdit:Select TextEdit:SelectAll TextEdit:SetText TextEdit:Submit Toggle
+ToggleBlur ToggleFade ToggleMeasure ToggleMeasureGroup ToggleMeter ToggleMeterGroup ToggleMouseAction ToggleMouseActionGroup
+TogglePauseMeasure TogglePauseMeasureGroup UnpauseMeasure UnpauseMeasureGroup Update UpdateMeasure UpdateMeasureGroup UpdateMeter
+UpdateMeterGroup WebParser:ClearResults WebParser:Refetch WindowMessage:Send ZPos
+)terms";

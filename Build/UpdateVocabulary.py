@@ -24,9 +24,13 @@ def main():
 
     source = args.rainmeter
     names = Counter()
+    section_bangs = set()
     for folder in ("Library", "Plugins", "Application"):
         for file in (source / folder).rglob("*.cpp"):
             contents = file.read_text(encoding="utf-8-sig", errors="replace")
+            if folder == "Library":
+                section_bangs.update(re.findall(
+                    r'\bREGISTER_(?:METER|MEASURE|SKIN)_BANG\([^;\n]*L"([\w:]+)"\)', contents))
             names.update(re.findall(r'\bL"([@A-Za-z][\w@:-]{0,70})"', contents, re.ASCII))
             for option in re.findall(r'\bRead\w+<"([@A-Za-z][\w@]{0,70})">', contents, re.ASCII):
                 words[0].add(option.lower())
@@ -65,8 +69,10 @@ def main():
             spellings.setdefault(term.lower(), term)
 
     bangs = (source / "Library/CommandHandler.cpp").read_text(encoding="utf-8-sig")
+    skin_targets = section_bangs | set(re.findall(
+        r'\{\s*Bang::\w+,\s*L"([\w:]+)",\s*\d+,\s*DoBang\s*\}', bangs))
     # The registered table supplies both canonical case and newly added commands.
-    for name in re.findall(r'\{\s*Bang::\w+,\s*L"([\w:]+)"', bangs):
+    for name in re.findall(r'\{\s*Bang::\w+,\s*L"([\w:]+)"', bangs) + sorted(section_bangs):
         if name.lower() not in words[8]:
             words[4].add(name.lower())
         remember(name)
@@ -96,6 +102,10 @@ def main():
         lines.extend(" ".join(terms[i:i + 8]) for i in range(0, len(terms), 8))
         lines.append(')terms",')
     lines.append("};")
+    lines.extend(["", 'constexpr std::string_view SkinBangTargets = R"terms('])
+    targets = sorted(skin_targets, key=str.lower)
+    lines.extend(" ".join(targets[i:i + 8]) for i in range(0, len(targets), 8))
+    lines.append(')terms";')
     (ROOT / "RainSyntax/Vocabulary.inc").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

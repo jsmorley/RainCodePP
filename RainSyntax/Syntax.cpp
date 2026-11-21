@@ -127,7 +127,7 @@ Terms MakeTerms(View words)
 }
 
 struct Catalog {
-    Terms options, numbered, deprecatedOptions, bangs, deprecatedBangs, variables, dollars;
+    Terms options, numbered, deprecatedOptions, bangs, skinBangs, deprecatedBangs, variables, dollars;
     Terms functions, selectors, shapes, modifiers, shapeValues, path, inlines, flags;
     std::unordered_map<std::string, Terms> values, deprecatedValues;
 
@@ -143,6 +143,12 @@ struct Catalog {
         load(2, options);
         load(4, bangs);
         load(8, deprecatedBangs);
+        for (const auto& [key, bang] : bangs)
+            if (key.starts_with("skin:")) Insert(skinBangs, bang);
+        ForWords(SkinBangTargets, [&](View target) {
+            if (const auto bang = bangs.find(Lower(target)); bang != bangs.end())
+                Insert(skinBangs, "Skin:" + bang->second);
+        });
         load(5, variables);
         load(9, functions);
         load(10, selectors);
@@ -278,6 +284,11 @@ public:
         if (text[line.start] == ';')
         {
             Paint(line, Comment);
+            return;
+        }
+        if (text[line.start] == '!' || Slice(line).starts_with("[!"))
+        {
+            Paint(line, InvalidValue);
             return;
         }
         if (text[line.start] == '[')
@@ -966,16 +977,24 @@ private:
         size_t prefix = 0;
         const auto& catalog = Words();
         if (lower.starts_with("rainmeter")) { lower.erase(0, 9); prefix += 9; }
-        const bool redirected = lower.starts_with("skin:") && !catalog.bangs.contains(lower);
-        if (redirected) { lower.erase(0, 5); prefix += 5; }
-        Offer({command.start + prefix, command.end}, catalog.bangs, !catalog.deprecatedBangs.contains(lower));
-
-        if (catalog.bangs.contains(lower)) Paint({start, command.end}, Bang);
-        else if (catalog.deprecatedBangs.contains(lower)) Paint({start, command.end}, DeprecatedBang);
+        const bool namespacedSkin = lower.starts_with("skin:");
+        const bool redirected = namespacedSkin && !catalog.bangs.contains(lower);
+        const auto& candidates = namespacedSkin ? catalog.skinBangs : catalog.bangs;
+        const bool recognized = candidates.contains(lower);
+        if (redirected) lower.erase(0, 5);
+        const bool deprecated = catalog.deprecatedBangs.contains(lower);
+        Offer({command.start + prefix, command.end}, candidates, !deprecated);
+        if (recognized) Paint({start, command.end}, Bang);
+        else if (deprecated) Paint({start, command.end}, DeprecatedBang);
 
         const auto args = Arguments(command.end, end);
         size_t key = Missing, value = Missing;
         const size_t first = redirected ? 1 : 0;
+        const bool skinAlias = recognized && (lower == "skin:load" || lower == "skin:unload" ||
+            lower == "skin:toggle" || lower == "skin:edit");
+        const bool textEdit = recognized && lower.starts_with("textedit:") && lower != "textedit:dismiss";
+        const size_t textEditArgs = lower == "textedit:select" ? 2 :
+            lower == "textedit:settext" || lower == "textedit:scrollbyline" ? 1 : 0;
         const bool setsVariable = lower == "setvariable" || lower == "setvariablegroup";
         const bool setsColorVariable = setsVariable && first < args.size() && IsColorVariable(WithoutQuotes(args[first]));
         if (lower == "setoption" || lower == "setoptiongroup")
@@ -1021,7 +1040,9 @@ private:
             const bool reference = ((lower.ends_with("meter") || lower.ends_with("measure") ||
                 lower.ends_with("metergroup") || lower.ends_with("measuregroup") ||
                 lower == "setoption" || lower == "setoptiongroup" || lower == "writekeyvalue")
-                && i == first && i != key) || (redirected && i == 0);
+                && i == first && i != key) || ((redirected || skinAlias) && i == 0) ||
+                (skinAlias && i == 1 && lower != "skin:unload") ||
+                (textEdit && i == first && args.size() > first + textEditArgs);
             if (reference) Paint(inner, Reference);
             Scan(inner, {.numbers = true, .calls = lower.starts_with("commandmeasure") && i > first}, depth + 1);
         }
@@ -1103,7 +1124,7 @@ void ConfigureVocabulary(std::string_view overrides)
 std::string_view SectionName(std::string_view line)
 {
     line = Trim(line);
-    if (!line.starts_with('[')) return {};
+    if (!line.starts_with('[') || line.starts_with("[!")) return {};
     const size_t end = line.find(']');
     if (end == View::npos || line.substr(1, end - 1).find('[') != View::npos) return {};
     return Trim(line.substr(1, end - 1));

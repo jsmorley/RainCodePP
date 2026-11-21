@@ -38,6 +38,8 @@ LeftMouseUpAction=[!SetOption MeterCaption Text "[#Title]"][!Redraw]
 
 Rainmeter resolves actual skin values, variable nesting, and Lua or plugin commands when it runs. Highlighting follows the source text.
 
+A bang on its own line in a skin uses the **Invalid Value** style, with or without brackets. Put a bang in an action value to run it, such as `LeftMouseUpAction=!Skin:Load Config File` or `OnSubmitAction=[!TextEdit:Clear]`. In an action value, typing `!Skin:` offers the load and edit aliases along with bangs that can target a loaded skin.
+
 ## 4. Change how RainSyntax looks
 
 Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. There are six light palettes, six dark palettes, and **JSMorley**, based on Jeffrey Morley's RainLexer colors.

@@ -48,10 +48,20 @@ bool CheckEditing()
         suggest("Formula=max(si", "sin") &&
         suggest("Text=[&Battery:MaxV", "MaxValue") &&
         suggest("Text=[@MeterCaption:XW", "XW") &&
-        suggest("OnUpdateAction=[!Skin:Ref", "Refresh") &&
+        suggest("OnUpdateAction=[!Skin:Ref", "Skin:Refresh") &&
+        suggest("LeftMouseUpAction=!Skin:Lo", "Skin:Load") &&
+        !suggest("LeftMouseUpAction=!Skin:Lo", "Skin:LoadLayout") &&
+        suggest("OnRefreshAction=[!Skin:Mo", "Skin:Move") &&
+        !suggest("OnRefreshAction=[!Skin:Qu", "Skin:Quit") &&
+        suggest("OnSubmitAction=[!TextEdit:Se", "TextEdit:SetText") &&
+        suggest("OnUpdateAction=[!Skin:TextEdit:Se", "Skin:TextEdit:SetText") &&
+        !suggest("!Skin:Lo", "Skin:Load") &&
+        !suggest("[!Skin:Mo", "Skin:Move") &&
         correctsTo("meter=String", "meter", "Meter") &&
         correctsTo("FONTCOLOR=255,255,255", "FONTCOLOR", "FontColor") &&
         correctsTo("Meter=textedit", "textedit", "TextEdit") &&
+        correctsTo("OnRefreshAction=[!skin:move Config 100 200]", "skin:move", "Skin:Move") &&
+        correctsTo("LeftMouseUpAction=!skin:load Config", "skin:load", "Skin:Load") &&
         TermsAt("Fonstize=14", 8, false).typo == "FontSize" &&
         correctsTo("OnUpdateAction=[!setoption MeterLabel StringAlign Right]", "setoption", "SetOption") &&
         correctsTo("OnUpdateAction=[!SetOption MeterLabel stringalign Right]", "stringalign", "StringAlign") &&

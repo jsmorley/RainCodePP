@@ -297,7 +297,7 @@ constexpr const wchar_t* StyleDescriptions[] = {
     L"Section headers such as [Rainmeter].",
     L"Recognized option names such as FontColor.",
     L"The = between an option and its value.",
-    L"An unrecognized value for an option with fixed choices.",
+    L"An unrecognized fixed value or a standalone bang outside an action value.",
     L"A recognized value such as String in Meter=String.",
     L"A Rainmeter command such as !Refresh.",
     L"A Rainmeter-supplied #variable#, such as #CURRENTCONFIG#.",

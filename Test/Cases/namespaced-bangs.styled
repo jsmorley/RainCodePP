@@ -1,0 +1,56 @@
+{5}!Skin:Load Config{0}\n
+{5}!Skin:Load Config File{0}\n
+{5}!Skin:Unload Config{0}\n
+{5}[!Skin:Unload *]{0}\n
+{5}!Skin:Toggle Config File{0}\n
+{5}!Skin:Edit Config File{0}\n
+{5}[!Skin:Move "illustro\Clock" 100 200]{0}\n
+{5}[!Skin:Hide "Group=Widgets"]{0}\n
+{5}[!TextEdit:SetText InputField "New text"]{0}\n
+{5}[!TextEdit:Clear "Group=Inputs"]{0}\n
+{3}OnSubmitAction{4}={18}[{7}!TextEdit:Clear{18}]{0}\n
+{5}[!Skin:TextEdit:SetText "MySuite\Input" InputField "New text"]{0}\n
+{5}[!Refresh][!Redraw]{0}\n
+{2}[Rainmeter]{0}\n
+{3}OnRefreshAction{4}={18}[{7}!Skin:Load{0} {28}Config{18}][{7}!Skin:Load{0} {28}Config{0} {28}File{18}][{7}!Skin:Unload{0} {28}Config{18}]{0}\n
+{3}OnUpdateAction{4}={18}[{7}!Skin:Unload{0} {28}*{18}][{7}!Skin:Toggle{0} {28}Config{0} {28}File{18}][{7}!Skin:Edit{0} {28}Config{0} {28}File{18}]{0}\n
+{3}LeftMouseUpAction{4}={18}[{7}!Skin:Move{0} {20}"{28}illustro\Clock{20}"{0} {10}100{0} {10}200{18}][{7}!Skin:Hide{0} {20}"{28}Group=Widgets{20}"{18}]{0}\n
+{3}RightMouseUpAction{4}={7}!Skin:Load{0} {28}Config{0}\n
+{3}MiddleMouseUpAction{4}={18}[{0}!Skin:Quit{18}]{0}\n
+{2}[Variables]{0}\n
+{9}Text{4}={0}TextEdit\n
+{2}[MeterInput]{0}\n
+{3}Meter{4}={6}TextEdit{0}\n
+{3}OnSubmitAction{4}={18}[{7}!TextEdit:SetText{0} {20}"{19}Text for this meter{20}"{18}]{0}\n
+{3}OnFocusAction{4}={18}[{7}!TextEdit:SetText{0} {28}InputField{0} {20}"{19}New text{20}"{18}][{7}!TextEdit:Clear{0} {20}"{28}Group=Inputs{20}"{18}]{0}\n
+{3}OnUnfocusAction{4}={18}[{7}!Skin:TextEdit:SetText{0} {20}"{28}MySuite\Input{20}"{0} {28}InputField{0} {20}"{19}New text{20}"{18}]{0}\n
+--- folds ---
+0: 0x0401
+1: 0x0401
+2: 0x0401
+3: 0x0401
+4: 0x0401
+5: 0x0401
+6: 0x0401
+7: 0x0401
+8: 0x0401
+9: 0x0401
+10: 0x0401
+11: 0x0401
+12: 0x0401
+13: 0x2400 header
+14: 0x0401
+15: 0x0401
+16: 0x0401
+17: 0x0401
+18: 0x0401
+19: 0x2400 header
+20: 0x0401
+21: 0x2400 header
+22: 0x0401
+23: 0x0401
+24: 0x0401
+25: 0x0401
+--- out of range ---
+styles: 0
+levels: 0
