@@ -30,6 +30,8 @@ constexpr UINT_PTR OwnerTimer = 2;
 constexpr UINT_PTR PresetShiftTimer = 3;
 constexpr UINT RemovePresetMessage = WM_APP + 1;
 constexpr wchar_t HiddenPresetsSection[] = L"HiddenPresets";
+constexpr wchar_t SettingsWindowSection[] = L"SettingsWindow";
+constexpr wchar_t PositionKey[] = L"Position";
 constexpr std::string_view PreviewLines[] = {
     "[Rainmeter]",
     "; Rainmeter syntax preview",
@@ -462,6 +464,7 @@ struct Editor {
     Path config, plugin, nppSettings;
     EditorFont editorFont;
     HWND window = nullptr;
+    std::optional<POINT> windowPosition;
     Palette palette, activePalette;
     std::vector<std::string> words;
     size_t group = 0, style = 0;
@@ -503,6 +506,47 @@ struct Editor {
         return std::filesystem::exists(saved) ? saved : config / StyleFile;
     }
     Path Notepad() const { return plugin.parent_path().parent_path() / L"notepad++.exe"; }
+
+    void TrackWindowPosition()
+    {
+        RECT bounds{};
+        if (!IsIconic(window) && GetWindowRect(window, &bounds))
+            windowPosition = POINT{bounds.left, bounds.top};
+    }
+
+    void RestoreWindowPosition()
+    {
+        const auto settings = config / SettingsFile;
+        wchar_t saved[64]{};
+        GetPrivateProfileStringW(SettingsWindowSection, PositionKey, L"", saved,
+            static_cast<DWORD>(std::size(saved)), settings.c_str());
+        POINT position{};
+        wchar_t extra{};
+        if (swscanf_s(saved, L"%ld,%ld%lc", &position.x, &position.y, &extra, 1U) == 2)
+        {
+            RECT bounds{};
+            MONITORINFO monitor{sizeof(monitor)};
+            if (GetWindowRect(window, &bounds) &&
+                GetMonitorInfoW(MonitorFromPoint(position, MONITOR_DEFAULTTONEAREST), &monitor))
+            {
+                const auto& work = monitor.rcWork;
+                const auto right = std::max(work.left, work.right - (bounds.right - bounds.left));
+                const auto bottom = std::max(work.top, work.bottom - (bounds.bottom - bounds.top));
+                SetWindowPos(window, nullptr, std::clamp(position.x, work.left, right),
+                    std::clamp(position.y, work.top, bottom), 0, 0,
+                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+        TrackWindowPosition();
+    }
+
+    void SaveWindowPosition() const
+    {
+        if (!windowPosition) return;
+        const auto settings = config / SettingsFile;
+        const auto value = std::to_wstring(windowPosition->x) + L"," + std::to_wstring(windowPosition->y);
+        WritePrivateProfileStringW(SettingsWindowSection, PositionKey, value.c_str(), settings.c_str());
+    }
 
     void Init()
     {
@@ -557,6 +601,7 @@ struct Editor {
         SendMessageW(Control(IDC_STYLE_ID), CB_SETCURSEL, 0, 0);
         styleTooltips.Attach(Control(IDC_STYLE_ID));
         UpdateStyleFields();
+        RestoreWindowPosition();
     }
 
     void ShowTerms()
@@ -1267,6 +1312,8 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             return TRUE;
         }
         if (!editor) return FALSE;
+        if (message == WM_WINDOWPOSCHANGED && editor->windowPosition) editor->TrackWindowPosition();
+        if (message == WM_DESTROY) editor->SaveWindowPosition();
         if (message == WM_COMMAND) return editor->Command(LOWORD(wParam), HIWORD(wParam));
         if (message == WM_CLOSE) { editor->Close(); return TRUE; }
         if (message == WM_TIMER && wParam == RestartTimer) { editor->CheckRestart(); return TRUE; }
