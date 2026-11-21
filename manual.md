@@ -1,10 +1,10 @@
-# RainCode++ manual
+# RainSyntax manual
 
-RainCode++ highlights Rainmeter 5 skin and include files in Notepad++. It works on `.ini` and `.inc` files. For a tab that already has another language assigned, choose **Language → Rainmeter 5**.
+RainSyntax highlights Rainmeter 5 skin and include files in Notepad++. It works on `.ini` and `.inc` files. For a tab that already has another language assigned, choose **Language → Rainmeter 5**.
 
 ## 1. Open the sidebar
 
-Choose **Plugins → RainCode++ → Settings sidebar**. Drag the panel by its title to dock it elsewhere. **Help** opens this manual in its own panel.
+Choose **Plugins → RainSyntax → Settings sidebar**. Drag the panel by its title to dock it elsewhere. **Help** opens this manual in its own panel.
 
 ## 2. Type Rainmeter code
 
@@ -13,7 +13,7 @@ Choose **Plugins → RainCode++ → Settings sidebar**. Drag the panel by its ti
 - **Correct capitalization** uses the Rainmeter 5 spelling. After the first correction of an occurrence, you can override it while the document stays open.
 - **Correct obvious typos** corrects a completed option, bang, or fixed value when one supported spelling differs by a single edit. Use Undo to reverse an edit.
 
-All three typing aids start enabled. Use the sidebar to turn them off individually. Updating RainCode++ preserves your choices.
+All three typing aids start enabled. Use the sidebar to turn them off individually. Updating RainSyntax preserves your choices.
 
 ## 3. Read complex expressions
 
@@ -38,7 +38,7 @@ LeftMouseUpAction=[!SetOption MeterCaption Text "[#Title]"][!Redraw]
 
 Rainmeter resolves actual skin values, variable nesting, and Lua or plugin commands when it runs. Highlighting follows the source text.
 
-## 4. Change how RainCode++ looks
+## 4. Change how RainSyntax looks
 
 Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. There are six light palettes, six dark palettes, and **JSMorley**, based on Jeffrey Morley's RainLexer colors.
 
@@ -64,7 +64,7 @@ Use **Find next** to locate a term. **Restore category** reloads its built-in li
 
 ## 7. Return to the original RainLexer
 
-Setup backs up existing RainLexer plugin, vocabulary, and style files. **Open RainLexer backup** opens the backup location. RainCode++ and the original RainLexer can coexist.
+Setup backs up existing RainLexer plugin, vocabulary, and style files. **Open RainLexer backup** opens the backup location. RainSyntax and the original RainLexer can coexist.
 
-Choose **Uninstall RainCode++** from the sidebar or settings app. Notepad++ closes normally and can prompt you to save. The uninstaller removes RainCode++, restores missing RainLexer files from the backup, and reopens Notepad++. The RainLexer backup and your RainCode++ preferences are kept.
+Choose **Uninstall RainSyntax** from the sidebar or settings app. Notepad++ closes normally and can prompt you to save. The uninstaller removes RainSyntax, restores missing RainLexer files from the backup, and reopens Notepad++. The RainLexer backup and your RainSyntax preferences are kept.
 

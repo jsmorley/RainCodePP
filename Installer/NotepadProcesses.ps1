@@ -1,6 +1,7 @@
-function Get-NotepadApps([string]$Exe, [string]$SettingsApp) {
-    Get-Process 'notepad++','RainCodePPSettings' -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -in @($Exe,$SettingsApp) }
+function Get-NotepadApps([string]$Exe, [string[]]$SettingsApps) {
+    $paths = @($Exe) + $SettingsApps
+    Get-Process 'notepad++','RainSyntaxSettings','RainCodePPSettings' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -in $paths }
 }
 
 function Wait-ForNotepadAppsToClose($Apps) {

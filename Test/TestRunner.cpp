@@ -22,7 +22,7 @@
 #include <string_view>
 #include <vector>
 
-namespace RainLexer {
+namespace RainSyntax {
 extern "C" Scintilla::ILexer5* SCI_METHOD CreateLexer(const char* name);
 }
 
@@ -30,7 +30,7 @@ namespace {
 
 bool CheckEditing()
 {
-    using namespace RainLexer;
+    using namespace RainSyntax;
     const auto suggest = [](std::string_view text, std::string_view candidate, bool variables = false) {
         const auto terms = TermsAt(text, text.size(), variables);
         return std::find(terms.candidates.begin(), terms.candidates.end(), candidate) != terms.candidates.end();
@@ -71,7 +71,7 @@ bool CheckEditing()
 
 bool CheckRegexSubstituteEdit()
 {
-    using namespace RainLexer;
+    using namespace RainSyntax;
     TestDocument doc("[Measure]\nSubstitute=\"a+\":\"literal\"\nRegExpSubstitute=0\n");
     const auto flag = doc.Text().find("=0") + 1;
     const auto pattern = doc.Text().find("a+");
@@ -283,7 +283,7 @@ int main(int argc, char* argv[])
 		return 2;
 	}
 
-	Scintilla::ILexer5* lexer = RainLexer::CreateLexer(RainLexer::LexerName);
+	Scintilla::ILexer5* lexer = RainSyntax::CreateLexer(RainSyntax::LexerName);
 	if (lexer == nullptr)
 	{
 		fprintf(stderr, "CreateLexer returned null\n");

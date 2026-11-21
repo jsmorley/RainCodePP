@@ -1,4 +1,4 @@
-"""Write the RainCode++ palettes using stable Scintilla style IDs."""
+"""Write the RainSyntax palettes using stable Scintilla style IDs."""
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -114,7 +114,7 @@ def main():
             ET.SubElement(lexer, "WordsStyle", name=name, styleID=str(style_id), fgColor=color,
                           bgColor=background, fontName=face, fontStyle=str(flags), fontSize=size)
         ET.indent(document, space="    ")
-        ET.ElementTree(document).write(config / f"RainCodePP-{theme}.xml",
+        ET.ElementTree(document).write(config / f"RainSyntax-{theme}.xml",
                                        encoding="utf-8", xml_declaration=True)
     manifest = "\n".join(f"{family}|{name}" for family, name, _, _ in PALETTES)
     (config / "Palettes.txt").write_text(manifest + "\n", encoding="ascii")

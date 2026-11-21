@@ -7,14 +7,14 @@
 #include <string>
 #include <string_view>
 
-namespace RainLexer {
-inline constexpr wchar_t VocabularyFile[] = L"RainCodePP-vocabulary.txt";
-inline constexpr wchar_t UninstallerFile[] = L"Uninstall RainCode++.exe";
+namespace RainSyntax {
+inline constexpr wchar_t VocabularyFile[] = L"RainSyntax-vocabulary.txt";
+inline constexpr wchar_t UninstallerFile[] = L"Uninstall RainSyntax.exe";
 
 inline std::filesystem::path ClassicBackup(const std::filesystem::path& config,
     const std::filesystem::path& plugin)
 {
-    constexpr wchar_t BackupDirectory[] = L"RainCodePP-backup";
+    constexpr wchar_t BackupDirectory[] = L"RainSyntax-backup";
     const auto profile = config / BackupDirectory;
     std::error_code error;
     if (std::filesystem::is_directory(profile / L"Original RainLexer", error)) return profile;

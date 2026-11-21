@@ -96,7 +96,7 @@ def main():
         lines.extend(" ".join(terms[i:i + 8]) for i in range(0, len(terms), 8))
         lines.append(')terms",')
     lines.append("};")
-    (ROOT / "RainLexer/Vocabulary.inc").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (ROOT / "RainSyntax/Vocabulary.inc").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@
 #include <vector>
 
 namespace {
-using namespace RainLexer;
+using namespace RainSyntax;
 using Path = std::filesystem::path;
 constexpr wchar_t DefaultPreset[] = L"Clear Skies";
 constexpr UINT_PTR RestartTimer = 1;
@@ -466,7 +466,7 @@ struct Editor {
 
     Path Preset(std::wstring_view name) const
     {
-        return plugin / L"Presets" / (L"RainCodePP-" + std::wstring(name) + L".xml");
+        return plugin / L"Presets" / (L"RainSyntax-" + std::wstring(name) + L".xml");
     }
     Path ActivePalette() const
     {
@@ -779,7 +779,7 @@ struct Editor {
     bool ReplacePalette() const
     {
         return !paletteDirty || MessageBoxW(window, L"Replace the palette you are editing?",
-            L"RainCode++ Settings", MB_OKCANCEL | MB_ICONQUESTION) == IDOK;
+            L"RainSyntax Settings", MB_OKCANCEL | MB_ICONQUESTION) == IDOK;
     }
 
     void Load(const Path& path, bool active)
@@ -798,7 +798,7 @@ struct Editor {
         dialog.hwndOwner = window;
         dialog.lpstrFile = filename.data();
         dialog.nMaxFile = static_cast<DWORD>(filename.size());
-        dialog.lpstrFilter = L"RainLexer palette (*.xml)\0*.xml\0\0";
+        dialog.lpstrFilter = L"RainSyntax palette (*.xml)\0*.xml\0\0";
         dialog.lpstrDefExt = L"xml";
         dialog.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR |
             (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
@@ -862,7 +862,7 @@ struct Editor {
             catch (const std::exception& error)
             {
                 const auto message = L"The syntax palette was saved. " + Wide(error.what());
-                MessageBoxW(window, message.c_str(), L"RainCode++ Settings", MB_OK | MB_ICONWARNING);
+                MessageBoxW(window, message.c_str(), L"RainSyntax Settings", MB_OK | MB_ICONWARNING);
             }
         }
         catch (...)
@@ -1011,7 +1011,7 @@ struct Editor {
     void Close()
     {
         if ((wordsDirty || paletteDirty) && MessageBoxW(window,
-            L"Close settings with unapplied vocabulary or palette changes?", L"RainCode++ Settings",
+            L"Close settings with unapplied vocabulary or palette changes?", L"RainSyntax Settings",
             MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
         if (pendingPalette) CancelRestart();
         EndDialog(window, 0);
@@ -1049,7 +1049,7 @@ struct Editor {
         case IDC_FIND_NEXT: FindNext(); break;
         case IDC_RESET_TERMS:
             if (MessageBoxW(window, L"Restore the built-in terms for this category?",
-                L"RainCode++ Settings", MB_OKCANCEL | MB_ICONQUESTION) == IDOK)
+                L"RainSyntax Settings", MB_OKCANCEL | MB_ICONQUESTION) == IDOK)
             {
                 words[group] = ReadVocabulary({})[group];
                 wordsDirty = true;
@@ -1149,7 +1149,7 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     catch (const std::exception& e)
     {
         const auto error = Wide(e.what());
-        MessageBoxW(window, error.c_str(), L"RainCode++ Settings", MB_OK | MB_ICONERROR);
+        MessageBoxW(window, error.c_str(), L"RainSyntax Settings", MB_OK | MB_ICONERROR);
         if (message == WM_INITDIALOG) EndDialog(window, 1);
         return TRUE;
     }
@@ -1204,8 +1204,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
     }
     else
     {
-        MessageBoxW(nullptr, L"Open this app from the RainCode++ settings sidebar in Notepad++.",
-            L"RainCode++ Settings", MB_OK | MB_ICONINFORMATION);
+        MessageBoxW(nullptr, L"Open this app from the RainSyntax settings sidebar in Notepad++.",
+            L"RainSyntax Settings", MB_OK | MB_ICONINFORMATION);
     }
     if (arguments) LocalFree(arguments);
     CoUninitialize();

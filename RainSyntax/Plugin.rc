@@ -11,8 +11,8 @@
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION RAINLEXER_VERSION_RC
- PRODUCTVERSION RAINLEXER_VERSION_RC
+ FILEVERSION RAINSYNTAX_VERSION_RC
+ PRODUCTVERSION RAINSYNTAX_VERSION_RC
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS VS_FF_DEBUG
@@ -27,11 +27,11 @@ BEGIN
     BEGIN
         BLOCK "040904E4"
         BEGIN
-            VALUE "FileDescription", "RainCode++ - Notepad++ plugin"
-            VALUE "FileVersion", RAINLEXER_VERSION_STRING
+            VALUE "FileDescription", "RainSyntax - Notepad++ plugin"
+            VALUE "FileVersion", RAINSYNTAX_VERSION_STRING
             VALUE "LegalCopyright", "\xA9 2026 Jeffrey Morley and the Rainmeter Team"
-            VALUE "OriginalFilename", "RainCodePP.dll"
-            VALUE "ProductVersion", RAINLEXER_VERSION_STRING
+            VALUE "OriginalFilename", "RainSyntax.dll"
+            VALUE "ProductVersion", RAINSYNTAX_VERSION_STRING
         END
     END
     BLOCK "VarFileInfo"
@@ -66,7 +66,7 @@ BEGIN
     PUSHBUTTON "Refresh all", IDC_REFRESH_ALL, 77, 138, 60, 16, WS_TABSTOP
     PUSHBUTTON "Restart Rainmeter", IDC_RESTART_RAINMETER, 13, 159, 124, 16, WS_TABSTOP
     PUSHBUTTON "Open RainLexer backup", IDC_BACKUP, 8, 193, 134, 16, WS_TABSTOP
-    PUSHBUTTON "Uninstall RainCode++...", IDC_UNINSTALL, 8, 213, 134, 16, WS_TABSTOP
+    PUSHBUTTON "Uninstall RainSyntax...", IDC_UNINSTALL, 8, 213, 134, 16, WS_TABSTOP
     PUSHBUTTON "Help", IDC_SHOW_MANUAL, 8, 233, 65, 16, WS_TABSTOP
     PUSHBUTTON "About", IDC_ABOUT, 77, 233, 65, 16, WS_TABSTOP
     CONTROL "<a>Notepad++ Style Configurator</a>", IDC_STYLE, "SysLink", WS_TABSTOP, 8, 262, 134, 13

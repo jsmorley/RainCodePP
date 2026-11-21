@@ -14,9 +14,9 @@
 #include <optional>
 #include <stdexcept>
 
-namespace RainLexer {
-inline constexpr wchar_t StyleFile[] = L"RainCodePP.xml";
-inline constexpr wchar_t LivePaletteFile[] = L"RainCodePP-palette.xml";
+namespace RainSyntax {
+inline constexpr wchar_t StyleFile[] = L"RainSyntax.xml";
+inline constexpr wchar_t LivePaletteFile[] = L"RainSyntax-palette.xml";
 inline constexpr wchar_t StyleXPath[] = L"/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']/WordsStyle";
 
 using Microsoft::WRL::ComPtr;
@@ -66,7 +66,7 @@ inline ComPtr<IXMLDOMDocument2> OpenXml(const std::filesystem::path& path)
     document->put_preserveWhiteSpace(VARIANT_TRUE);
     VARIANT_BOOL loaded = VARIANT_FALSE;
     if (FAILED(document->load(_variant_t(path.c_str()), &loaded)) || !loaded)
-        throw std::runtime_error("Could not read the RainLexer palette XML.");
+        throw std::runtime_error("Could not read the RainSyntax palette XML.");
     return document;
 }
 
@@ -83,7 +83,7 @@ std::array<bool, StyleCount> ForStyles(IXMLDOMDocument2* document, Callback call
 {
     ComPtr<IXMLDOMNodeList> nodes;
     if (FAILED(document->selectNodes(_bstr_t(StyleXPath), &nodes)) || !nodes)
-        throw std::runtime_error("This file does not contain RainCode++ styles.");
+        throw std::runtime_error("This file does not contain RainSyntax styles.");
     std::array<bool, StyleCount> seen{};
     for (;;)
     {
@@ -102,7 +102,7 @@ std::array<bool, StyleCount> ForStyles(IXMLDOMDocument2* document, Callback call
         callback(id, style.Get());
     }
     if (std::find(seen.begin(), seen.begin() + Red, false) != seen.begin() + Red)
-        throw std::runtime_error("This palette is missing one or more RainCode++ styles.");
+        throw std::runtime_error("This palette is missing one or more RainSyntax styles.");
     return seen;
 }
 

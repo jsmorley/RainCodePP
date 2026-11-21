@@ -10,7 +10,7 @@
 #include <array>
 #include <cstring>
 
-namespace RainLexer {
+namespace RainSyntax {
 using namespace Scintilla;
 namespace {
 constexpr std::array Names = {

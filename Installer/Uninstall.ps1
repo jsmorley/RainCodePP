@@ -7,9 +7,9 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'NotepadProcesses.ps1')
 . (Join-Path $PSScriptRoot 'InstallerPrivileges.ps1')
 
-function Return-RainCodeTabsToRainLexer([string]$Directory, [string]$Profile) {
+function Return-RainSyntaxTabsToRainLexer([string]$Directory, [string]$Profile) {
     $legacy = @($Directory,$Profile) | Where-Object {
-        (Test-Path -LiteralPath (Join-Path $_ 'plugins\RainLexer\RainLexer.dll')) -or
+        (Test-Path -LiteralPath (Join-Path $_ 'plugins\RainSyntax\RainLexer.dll')) -or
         (Test-Path -LiteralPath (Join-Path $_ 'plugins\RainLexer.dll'))
     }
     $session = Join-Path $Profile 'session.xml'
@@ -45,16 +45,16 @@ function Restart-Notepad([string]$Exe, [string]$Directory) {
 }
 
 function Remove-ProgramFiles([string]$Directory) {
-    $plugin = Join-Path $directory 'plugins\RainCodePP'
+    $plugin = Join-Path $directory 'plugins\RainSyntax'
     Copy-ClassicFiles (Get-ApplicationBackup $directory) $directory
 
-    foreach ($name in @('RainCodePP.dll','RainCodePPSettings.exe','README.md','HowToInstall.md','manual.md','LICENSE','LICENSE-GPL-2.0','LICENSE-Scintilla.txt')) {
+    foreach ($name in @('RainSyntax.dll','RainSyntaxSettings.exe','README.md','HowToInstall.md','manual.md','LICENSE','LICENSE-GPL-2.0','LICENSE-Scintilla.txt')) {
         $file = Join-Path $plugin $name
         if (Test-Path -LiteralPath $file -PathType Leaf) { [IO.File]::Delete($file) }
     }
     if (Test-Path -LiteralPath $plugin -PathType Container) {
         Get-ChildItem -LiteralPath $plugin -File -Force | Where-Object {
-            $_.Name -match '^(RainCodePP\.dll|RainCodePPSettings\.exe|Uninstall RainCode\+\+\.exe|README\.md|HowToInstall\.md|manual\.md|LICENSE|LICENSE-GPL-2\.0|LICENSE-Scintilla\.txt)\.[0-9a-f]{32}\.(bak|new)$'
+            $_.Name -match '^(RainSyntax\.dll|RainSyntaxSettings\.exe|Uninstall RainSyntax\.exe|README\.md|HowToInstall\.md|manual\.md|LICENSE|LICENSE-GPL-2\.0|LICENSE-Scintilla\.txt)\.[0-9a-f]{32}\.(bak|new)$'
         } | ForEach-Object {
             try { [IO.File]::Delete($_.FullName) }
             catch { Write-Verbose "The setup scratch file is still in use: $($_.FullName)" }
@@ -66,12 +66,12 @@ function Remove-ProgramFiles([string]$Directory) {
         foreach ($row in Get-Content -LiteralPath $manifest) {
             $name = ($row -split '\|', 2)[1]
             if ($name -match '^[A-Za-z0-9][A-Za-z0-9 ]*$') {
-                [IO.File]::Delete((Join-Path $presets "RainCodePP-$name.xml"))
+                [IO.File]::Delete((Join-Path $presets "RainSyntax-$name.xml"))
             }
         }
         [IO.File]::Delete($manifest)
     }
-    $uninstaller = Join-Path $plugin 'Uninstall RainCode++.exe'
+    $uninstaller = Join-Path $plugin 'Uninstall RainSyntax.exe'
     if (Test-Path -LiteralPath $uninstaller -PathType Leaf) { [IO.File]::Delete($uninstaller) }
     foreach ($folder in @($presets,$plugin)) {
         if ((Test-Path -LiteralPath $folder) -and -not (Get-ChildItem -LiteralPath $folder -Force | Select-Object -First 1)) {
@@ -85,10 +85,10 @@ try {
     $directory = (Resolve-Path -LiteralPath $NppDirectory).Path
     $exe = Join-Path $directory 'notepad++.exe'
     if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Notepad++ was not found in the installation folder.' }
-    $plugin = Join-Path $directory 'plugins\RainCodePP'
-    $settingsApp = Join-Path $plugin 'RainCodePPSettings.exe'
+    $plugin = Join-Path $directory 'plugins\RainSyntax'
+    $settingsApp = Join-Path $plugin 'RainSyntaxSettings.exe'
     if (!(Wait-ForNotepadAppsToClose @(Get-NotepadApps $exe $settingsApp))) {
-        throw 'Notepad++ or RainCode++ Settings is still open. Save or close your work, then run the uninstaller again.'
+        throw 'Notepad++ or RainSyntax Settings is still open. Save or close your work, then run the uninstaller again.'
     }
     if ($ProgramFilesOnly) {
         Remove-ProgramFiles $directory
@@ -98,12 +98,12 @@ try {
     if (Test-ApplicationWritable $directory) {
         Remove-ProgramFiles $directory
     } else {
-        Invoke-ElevatedInstaller (Join-Path $plugin 'Uninstall RainCode++.exe') '/S /ProgramFilesOnly'
+        Invoke-ElevatedInstaller (Join-Path $plugin 'Uninstall RainSyntax.exe') '/S /ProgramFilesOnly'
     }
     if ($profile -ne $directory) { Copy-ClassicFiles (Get-ProfileBackup $profile) $profile }
-    try { Return-RainCodeTabsToRainLexer $directory $profile }
+    try { Return-RainSyntaxTabsToRainLexer $directory $profile }
     catch { Write-Output "Could not restore the RainLexer language on open tabs: $($_.Exception.Message)" }
-    Write-Output 'Removed RainCode++. Saved preferences and the RainLexer backup were kept.'
+    Write-Output 'Removed RainSyntax. Saved preferences and the RainLexer backup were kept.'
     try { Restart-Notepad $exe $directory }
     catch { Write-Output "Could not reopen Notepad++ automatically: $($_.Exception.Message)" }
 } catch {

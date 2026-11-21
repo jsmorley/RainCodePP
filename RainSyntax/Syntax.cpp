@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace RainLexer {
+namespace RainSyntax {
 namespace {
 using View = std::string_view;
 using Terms = std::unordered_map<std::string, std::string>;

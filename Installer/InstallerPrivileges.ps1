@@ -7,11 +7,11 @@ function Test-Administrator {
 function Test-ApplicationWritable([string]$Directory) {
     # Try each existing parent that may receive files. A portable copy in a
     # user-writable directory needs no elevation.
-    foreach ($relative in @('plugins','plugins\RainCodePP','plugins\RainCodePP\Presets',
-            'plugins\RainCodePP-backup','plugins\Config')) {
+    foreach ($relative in @('plugins','plugins\RainSyntax','plugins\RainSyntax\Presets',
+            'plugins\RainSyntax-backup','plugins\RainCodePP-backup','plugins\Config')) {
         $parent = Join-Path $Directory $relative
         while (!(Test-Path -LiteralPath $parent -PathType Container)) { $parent = Split-Path -Parent $parent }
-        $probe = Join-Path $parent ("RainCodePP-" + [guid]::NewGuid().ToString('N') + '.tmp')
+        $probe = Join-Path $parent ("RainSyntax-" + [guid]::NewGuid().ToString('N') + '.tmp')
         try {
             $stream = [IO.FileStream]::new($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
                 [IO.FileShare]::None, 4096, [IO.FileOptions]::DeleteOnClose)

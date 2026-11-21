@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace RainLexer {
+namespace RainSyntax {
 
 inline constexpr char LexerName[] = "Rainmeter5";
 

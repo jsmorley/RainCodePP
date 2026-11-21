@@ -21,7 +21,7 @@
 #include <unordered_map>
 
 namespace {
-using namespace RainLexer;
+using namespace RainSyntax;
 NppData npp{};
 std::wstring settingsPath;
 std::filesystem::path configPath;
@@ -323,9 +323,9 @@ void OpenHelp();
 HMODULE PluginModule();
 void About()
 {
-    MessageBoxW(npp._nppHandle, RAINLEXER_TITLE L"\nCopyright \u00A9 2026 Jeffrey Morley\n\n"
+    MessageBoxW(npp._nppHandle, RAINSYNTAX_TITLE L"\nCopyright \u00A9 2026 Jeffrey Morley\n\n"
         L"Rainmeter 5 syntax highlighting and typing assistance for Notepad++.\n"
-        L"Based on RainLexer by the Rainmeter Team.", RAINLEXER_TITLE, MB_OK | MB_ICONINFORMATION);
+        L"Based on RainLexer by the Rainmeter Team.", RAINSYNTAX_TITLE, MB_OK | MB_ICONINFORMATION);
 }
 ShortcutKey completionShortcut{true, true, false, VK_SPACE};
 FuncItem functions[] = {
@@ -336,7 +336,7 @@ FuncItem functions[] = {
     {L"Settings sidebar", TogglePanel, 0, false, nullptr},
     {L"Edit vocabulary and palettes...", OpenSettings, 0, false, nullptr},
     {L"Help", OpenHelp, 0, false, nullptr},
-    {L"About RainCode++", About, 0, false, nullptr}
+    {L"About RainSyntax", About, 0, false, nullptr}
 };
 
 void UpdateCheck(size_t item, bool enabled)
@@ -505,7 +505,7 @@ void RefreshHelp()
     const bool dark = SendMessageW(npp._nppHandle, IsNotepadDark, 0, 0) != 0;
     const auto manual = ReadTextFile(PluginDirectory() / L"manual.md");
     RenderMarkdown(helpText, manual.empty()
-        ? "# RainCode++ Help\n\nThe installed manual.md could not be opened. Run RainCode++ setup to restore it."
+        ? "# RainSyntax Help\n\nThe installed manual.md could not be opened. Run RainSyntax setup to restore it."
         : manual, dark);
 }
 
@@ -535,7 +535,7 @@ INT_PTR CALLBACK HelpDialog(HWND window, UINT message, WPARAM, LPARAM lParam)
 
 void OpenHelp()
 {
-    constexpr wchar_t title[] = L"RainCode++ Help";
+    constexpr wchar_t title[] = L"RainSyntax Help";
     if (!helpPanel)
     {
         static const HMODULE richEdit = LoadLibraryExW(L"Msftedit.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -549,8 +549,8 @@ void OpenHelp()
             return;
         }
         constexpr UINT DockRight = 1U << 28;
-        static constexpr wchar_t dockTitle[] = L"RainCode++ Help";
-        DockPanel data{helpPanel, dockTitle, HelpItem, DockRight, nullptr, nullptr, {}, 0, L"RainCodePP.dll"};
+        static constexpr wchar_t dockTitle[] = L"RainSyntax Help";
+        DockPanel data{helpPanel, dockTitle, HelpItem, DockRight, nullptr, nullptr, {}, 0, L"RainSyntax.dll"};
         SendMessage(npp._nppHandle, NPPM_DMMREGASDCKDLG, 0, reinterpret_cast<LPARAM>(&data));
     }
     RefreshHelp();
@@ -566,7 +566,7 @@ void OpenBackup()
         return;
     }
     MessageBoxW(npp._nppHandle, L"Setup did not find any original RainLexer files to back up.",
-        RAINLEXER_TITLE, MB_OK | MB_ICONINFORMATION);
+        RAINSYNTAX_TITLE, MB_OK | MB_ICONINFORMATION);
 }
 
 void Uninstall()
@@ -574,14 +574,14 @@ void Uninstall()
     const auto path = PluginDirectory() / UninstallerFile;
     const auto result = ShellExecuteW(npp._nppHandle, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     if (reinterpret_cast<INT_PTR>(result) == ERROR_FILE_NOT_FOUND)
-        MessageBoxW(npp._nppHandle, L"The uninstaller is missing. Run RainCode++ setup to restore it.",
-            RAINLEXER_TITLE, MB_OK | MB_ICONERROR);
+        MessageBoxW(npp._nppHandle, L"The uninstaller is missing. Run RainSyntax setup to restore it.",
+            RAINSYNTAX_TITLE, MB_OK | MB_ICONERROR);
 }
 
 void OpenSettings()
 {
     const auto directory = PluginDirectory();
-    const auto program = directory / L"RainCodePPSettings.exe";
+    const auto program = directory / L"RainSyntaxSettings.exe";
     if (!configPath.empty())
     {
         auto parameters = L"--config \"" + (configPath / L".").wstring() + L"\" --owner " +
@@ -597,8 +597,8 @@ void OpenSettings()
         const auto result = ShellExecuteW(npp._nppHandle, L"open", program.c_str(), parameters.c_str(), directory.c_str(), SW_SHOWNORMAL);
         if (reinterpret_cast<INT_PTR>(result) > 32) return;
     }
-    MessageBoxW(npp._nppHandle, L"Could not open RainCode++ Settings. Check the plugin installation.",
-        RAINLEXER_TITLE, MB_OK | MB_ICONERROR);
+    MessageBoxW(npp._nppHandle, L"Could not open RainSyntax Settings. Check the plugin installation.",
+        RAINSYNTAX_TITLE, MB_OK | MB_ICONERROR);
 }
 
 void TogglePanel()
@@ -614,7 +614,7 @@ void TogglePanel()
     panel = CreateDialogParamW(PluginModule(), MAKEINTRESOURCEW(IDD_SETTINGS), npp._nppHandle, PanelDialog, 0);
     if (!panel) return;
     constexpr UINT DockRight = 1U << 28;
-    DockPanel data{panel, L"RainCode++", SettingsSidebar, DockRight, nullptr, nullptr, {}, 0, L"RainCodePP.dll"};
+    DockPanel data{panel, L"RainSyntax", SettingsSidebar, DockRight, nullptr, nullptr, {}, 0, L"RainSyntax.dll"};
     SendMessage(npp._nppHandle, NPPM_DMMREGASDCKDLG, 0, reinterpret_cast<LPARAM>(&data));
     SendMessage(npp._nppHandle, NPPM_DMMSHOW, 0, reinterpret_cast<LPARAM>(panel));
 }
@@ -626,10 +626,10 @@ extern "C" void setInfo(NppData data)
     std::array<wchar_t, 32768> path{};
     if (!SendMessage(npp._nppHandle, NPPM_GETPLUGINSCONFIGDIR, path.size(), reinterpret_cast<LPARAM>(path.data()))) return;
     configPath = path.data();
-    settingsPath = (configPath / L"RainCodePP-settings.ini").wstring();
+    settingsPath = (configPath / L"RainSyntax-settings.ini").wstring();
     ConfigureVocabulary(ReadTextFile(configPath / VocabularyFile));
 }
-extern "C" const wchar_t* getName() { return L"RainCode++"; }
+extern "C" const wchar_t* getName() { return L"RainSyntax"; }
 extern "C" BOOL isUnicode() { return TRUE; }
 extern "C" FuncItem* getFuncsArray(int* count)
 {

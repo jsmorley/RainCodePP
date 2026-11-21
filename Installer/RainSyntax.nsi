@@ -9,16 +9,16 @@ SetCompressor /SOLID lzma
 
 !define PBS_MARQUEE 0x08
 
-Name "RainCode++ for Notepad++"
-OutFile "..\out\RainCode++-1.0.16-Setup.exe"
+Name "RainSyntax for Notepad++"
+OutFile "..\out\RainSyntax-1.0.16-Setup.exe"
 VIProductVersion "1.0.16.0"
-VIAddVersionKey "ProductName" "RainCode++"
-VIAddVersionKey "FileDescription" "RainCode++ Setup for Notepad++"
+VIAddVersionKey "ProductName" "RainSyntax"
+VIAddVersionKey "FileDescription" "RainSyntax Setup for Notepad++"
 VIAddVersionKey "FileVersion" "1.0.16"
 VIAddVersionKey "LegalCopyright" "Copyright 2026 Jeffrey Morley. Based on RainLexer by the Rainmeter Team."
-!define MUI_DIRECTORYPAGE_TEXT_TOP "Choose the folder containing notepad++.exe. Setup installs or updates RainCode++ in that copy of Notepad++."
-!define MUI_FINISHPAGE_TEXT "RainCode++ is ready. Open Notepad++ and use Language > Rainmeter 5 or Plugins > RainCode++ > Settings sidebar."
-!define MUI_UNCONFIRMPAGE_TEXT_TOP "Uninstall closes Notepad++ normally, removes RainCode++, and reopens Notepad++. You can save open files when prompted."
+!define MUI_DIRECTORYPAGE_TEXT_TOP "Choose the folder containing notepad++.exe. Setup installs or updates RainSyntax in that copy of Notepad++."
+!define MUI_FINISHPAGE_TEXT "RainSyntax is ready. Open Notepad++ and use Language > Rainmeter 5 or Plugins > RainSyntax > Settings sidebar."
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "Uninstall closes Notepad++ normally, removes RainSyntax, and reopens Notepad++. You can save open files when prompted."
 !insertmacro MUI_PAGE_WELCOME
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE CheckDirectory
 !insertmacro MUI_PAGE_DIRECTORY
@@ -117,7 +117,7 @@ Function PalettePage
     ${If} $0 == error
         Abort
     ${EndIf}
-    ${NSD_CreateLabel} 0 6u 100% 22u "Choose how RainCode++ should color Rainmeter files."
+    ${NSD_CreateLabel} 0 6u 100% 22u "Choose how RainSyntax should color Rainmeter files."
     Pop $0
     ${NSD_CreateDropList} 0 32u 100% 130u ""
     Pop $PaletteControl
@@ -125,11 +125,14 @@ Function PalettePage
     ${If} ${FileExists} "$INSTDIR\doLocalConf.xml"
         StrCpy $1 "$INSTDIR"
     ${EndIf}
-    ${If} ${FileExists} "$1\plugins\config\RainCodePP.xml"
+    ${If} ${FileExists} "$1\plugins\config\RainSyntax.xml"
+    ${OrIf} ${FileExists} "$1\plugins\config\RainSyntax-palette.xml"
+    ${OrIf} ${FileExists} "$1\plugins\config\RainCodePP.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainCodePP-palette.xml"
+    ${OrIf} ${FileExists} "$INSTDIR\plugins\config\RainCodePP.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainLexer.xml"
         ${NSD_CB_AddString} $PaletteControl "Keep Current Style"
-        StrCpy $3 "Keep Current Style preserves your RainCode++ palette or imports your RainLexer styles on a first install."
+        StrCpy $3 "Keep Current Style preserves your RainSyntax palette or imports your RainLexer styles on a first install."
     ${Else}
         ${NSD_CB_AddString} $PaletteControl "Match Notepad++ mode"
         StrCpy $3 "Match Notepad++ mode picks a light or dark default based on your Notepad++ setting."
@@ -171,14 +174,15 @@ Function RunInstallScript
     DetailPrint "$1"
 FunctionEnd
 
-Section "RainCode++"
+Section "RainSyntax"
     InitPluginsDir
     SetOutPath "$PLUGINSDIR"
     File "Install.ps1"
     File "ClassicBackup.ps1"
     File "NotepadProcesses.ps1"
     File "InstallerPrivileges.ps1"
-    WriteUninstaller "$PLUGINSDIR\Uninstall RainCode++.exe"
+    File "PreviousInstall.ps1"
+    WriteUninstaller "$PLUGINSDIR\Uninstall RainSyntax.exe"
     File "..\LICENSE"
     File "..\LICENSE-GPL-2.0"
     File "..\ThirdParty\LICENSE-Scintilla.txt"
@@ -189,12 +193,12 @@ Section "RainCode++"
     File "..\Config\Presets\*.xml"
     File "..\Config\Presets\Palettes.txt"
     SetOutPath "$PLUGINSDIR\x86"
-    File "..\x32-Release\RainCodePP.dll"
-    File "..\x32-Release\RainCodePPSettings.exe"
+    File "..\x32-Release\RainSyntax.dll"
+    File "..\x32-Release\RainSyntaxSettings.exe"
     SetOutPath "$PLUGINSDIR\x64"
-    File "..\x64-Release\RainCodePP.dll"
-    File "..\x64-Release\RainCodePPSettings.exe"
-    DetailPrint "Installing RainCode++ and applying your syntax palette..."
+    File "..\x64-Release\RainSyntax.dll"
+    File "..\x64-Release\RainSyntaxSettings.exe"
+    DetailPrint "Installing RainSyntax and applying your syntax palette..."
     Push ""
     Call RunInstallScript
     ${If} $ProgramFilesOnly != ""
@@ -205,11 +209,11 @@ Section "RainCode++"
         Goto install_done
     ${EndIf}
     ${If} $0 == 2
-        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Notepad++ or RainCode++ Settings is open.$\r$\n$\r$\nClose them and continue setup? You can save any open work when prompted." /SD IDNO IDYES close_apps
+        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Notepad++ or RainSyntax Settings is open.$\r$\n$\r$\nClose them and continue setup? You can save any open work when prompted." /SD IDNO IDYES close_apps
         SetErrorLevel 2
         Abort
 close_apps:
-        DetailPrint "Waiting for Notepad++ and RainCode++ Settings to close. Save open work if prompted."
+        DetailPrint "Waiting for Notepad++ and RainSyntax Settings to close. Save open work if prompted."
         Push "-CloseRunningApps"
         Call RunInstallScript
         ${If} $0 == 3
@@ -219,18 +223,22 @@ close_apps:
         ${EndIf}
     ${EndIf}
     ${If} $0 != 0
-        MessageBox MB_ICONSTOP "RainCode++ setup failed.$\r$\n$1" /SD IDOK
+        MessageBox MB_ICONSTOP "RainSyntax setup failed.$\r$\n$1" /SD IDOK
         SetErrorLevel 1
         Abort
     ${EndIf}
     ${IfNot} ${FileExists} "$INSTDIR\doLocalConf.xml"
         SetRegView 64
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "DisplayName" "RainCode++ for Notepad++"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "DisplayVersion" "1.0.16"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "InstallLocation" "$INSTDIR"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "UninstallString" '"$INSTDIR\plugins\RainCodePP\Uninstall RainCode++.exe"'
-        WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "NoModify" 1
-        WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "NoRepair" 1
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayName" "RainSyntax for Notepad++"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.16"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "InstallLocation" "$INSTDIR"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "UninstallString" '"$INSTDIR\plugins\RainSyntax\Uninstall RainSyntax.exe"'
+        WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "NoModify" 1
+        WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "NoRepair" 1
+        ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "InstallLocation"
+        ${If} $0 == $INSTDIR
+            DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP"
+        ${EndIf}
     ${EndIf}
 install_done:
 SectionEnd
@@ -258,7 +266,7 @@ Section "Uninstall"
     Pop $1
     DetailPrint "$1"
     ${If} $0 != 0
-        MessageBox MB_ICONSTOP "RainCode++ uninstall failed.$\r$\n$1" /SD IDOK
+        MessageBox MB_ICONSTOP "RainSyntax uninstall failed.$\r$\n$1" /SD IDOK
         SetErrorLevel 1
         Abort
     ${EndIf}
@@ -266,9 +274,9 @@ Section "Uninstall"
         Goto uninstall_done
     ${EndIf}
     SetRegView 64
-    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "InstallLocation"
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "InstallLocation"
     ${If} $0 == $INSTDIR
-        DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP"
+        DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax"
     ${EndIf}
 uninstall_done:
 SectionEnd

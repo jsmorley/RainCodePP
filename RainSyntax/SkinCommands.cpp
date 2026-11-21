@@ -7,7 +7,7 @@
 #include <filesystem>
 #include <string>
 
-namespace RainLexer {
+namespace RainSyntax {
 namespace {
 constexpr UINT QueryRainmeter = WM_APP + 1000;
 constexpr ULONG_PTR QuerySkinsPath = 4101;
@@ -128,7 +128,7 @@ void SendSkinAction(HWND owner, HMODULE module, SkinAction action)
         DWORD_PTR result = 0;
         if (target && CopyData(target, owner, 1, command, result)) return;
     }
-    MessageBoxW(owner, error, RAINLEXER_TITLE, MB_ICONINFORMATION | MB_OK);
+    MessageBoxW(owner, error, RAINSYNTAX_TITLE, MB_ICONINFORMATION | MB_OK);
 }
 }
 

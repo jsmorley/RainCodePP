@@ -2,7 +2,7 @@
 #pragma once
 #include <Windows.h>
 
-namespace RainLexer {
+namespace RainSyntax {
 enum class SkinAction { RefreshSkin, RefreshAll, Restart };
 void SendSkinAction(HWND owner, HMODULE module, SkinAction action);
 }

@@ -20,8 +20,8 @@ try {
     New-Item -ItemType Directory -Path 'out' -Force | Out-Null
     if ($Target -ne 'Binaries') {
         $testFlags = '/nologo /std:c++20 /EHsc /W4 /MT /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /D_CRT_SECURE_NO_WARNINGS'
-        $includes = '/IThirdParty\Scintilla\include /IThirdParty\lexilla\include /IRainLexer'
-        $sources = 'Test\TestRunner.cpp RainLexer\Lexer.cpp RainLexer\Syntax.cpp'
+        $includes = '/IThirdParty\Scintilla\include /IThirdParty\lexilla\include /IRainSyntax'
+        $sources = 'Test\TestRunner.cpp RainSyntax\Lexer.cpp RainSyntax\Syntax.cpp'
         @(
             '@echo off'
             ('call "{0}" >nul || exit /b 1' -f $devCmd)
@@ -36,15 +36,15 @@ try {
     }
     if ($Target -ne 'Test') {
         foreach ($platform in @('Win32', 'x64')) {
-            & $msbuild RainCodePP.sln /m /nologo /v:m /p:Configuration=Release /p:PreferredToolArchitecture=x64 "/p:Platform=$platform"
+            & $msbuild RainSyntax.sln /m /nologo /v:m /p:Configuration=Release /p:PreferredToolArchitecture=x64 "/p:Platform=$platform"
             Check-Result "$platform plugin build"
-            & $msbuild RainLexer\RainCodePPSettings.vcxproj /m /nologo /v:m /p:Configuration=Release /p:PreferredToolArchitecture=x64 "/p:Platform=$platform"
+            & $msbuild RainSyntax\RainSyntaxSettings.vcxproj /m /nologo /v:m /p:Configuration=Release /p:PreferredToolArchitecture=x64 "/p:Platform=$platform"
             Check-Result "$platform settings build"
         }
     }
     if ($Target -eq 'All') {
         $nsis = Join-Path ${env:ProgramFiles(x86)} 'NSIS\Bin\makensis.exe'
-        & $nsis /V3 Installer\RainCodePP.nsi
+        & $nsis /V3 Installer\RainSyntax.nsi
         Check-Result 'Installer build'
     }
 } finally {

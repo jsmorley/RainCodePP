@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace RainLexer {
+namespace RainSyntax {
 namespace {
 using Text = std::wstring_view;
 enum class Ink { Body, Title, Heading, Bold, Code };

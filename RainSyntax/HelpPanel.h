@@ -3,7 +3,7 @@
 #include <Windows.h>
 #include <string_view>
 
-namespace RainLexer {
+namespace RainSyntax {
 void RenderMarkdown(HWND edit, std::string_view markdown, bool dark);
 }
 

@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClassicBackup.ps1')
 . (Join-Path $PSScriptRoot 'NotepadProcesses.ps1')
 . (Join-Path $PSScriptRoot 'InstallerPrivileges.ps1')
+. (Join-Path $PSScriptRoot 'PreviousInstall.ps1')
 
 function Remove-InstallScratch([string]$Path) {
     try { [IO.File]::Delete($Path) }
@@ -36,17 +37,23 @@ function Get-NotepadArchitecture([string]$Exe) {
     } finally { $reader.Dispose() }
 }
 
-function Add-ProfileFiles($Payload, [string]$ConfigRoot) {
+function Add-ProfileFiles($Payload, [string]$ConfigRoot, [string]$Directory) {
     $config = Join-Path $configRoot 'plugins\config'
-    $installedXml = Join-Path $config 'RainCodePP.xml'
-    $savedPalette = Join-Path $config 'RainCodePP-palette.xml'
+    $installedXml = Join-Path $config 'RainSyntax.xml'
+    $savedPalette = Join-Path $config 'RainSyntax-palette.xml'
     $classicXml = Join-Path $config 'RainLexer.xml'
     $oldStyles = $null
     $selected = $Palette
-    $previous = if (Test-Path -LiteralPath $installedXml -PathType Leaf) { Read-StyleXml $installedXml }
-    $hasSavedPalette = Test-Path -LiteralPath $savedPalette -PathType Leaf
+    $previousPath = if (Test-Path -LiteralPath $installedXml -PathType Leaf) { $installedXml }
+        else { Get-PreviousStyleFile $Directory $config }
+    $previous = if ($previousPath) { Read-StyleXml $previousPath }
+    $previousPalette = $savedPalette
+    if (!(Test-Path -LiteralPath $previousPalette -PathType Leaf)) {
+        $previousPalette = Join-Path $config 'RainCodePP-palette.xml'
+    }
+    $hasSavedPalette = Test-Path -LiteralPath $previousPalette -PathType Leaf
     if ($Palette -in @('Keep Current Style','Keep') -and ($previous -or $hasSavedPalette)) {
-        $source = if ($hasSavedPalette) { Read-StyleXml $savedPalette } else { $previous }
+        $source = if ($hasSavedPalette) { Read-StyleXml $previousPalette } else { $previous }
         $oldStyles = $source.SelectSingleNode("/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']")
     } elseif ($Palette -eq 'Keep Current Style') {
         if (-not (Test-Path -LiteralPath $classicXml -PathType Leaf)) {
@@ -77,7 +84,7 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot) {
     $manifest = Join-Path $presets 'Palettes.txt'
     $names = @(Get-Content -LiteralPath $manifest | ForEach-Object { ($_ -split '\|', 2)[1] })
     if ($selected -cnotin $names) { throw "Unknown palette: $selected" }
-    [xml]$styles = Get-Content -LiteralPath (Join-Path $presets "RainCodePP-$selected.xml") -Raw
+    [xml]$styles = Get-Content -LiteralPath (Join-Path $presets "RainSyntax-$selected.xml") -Raw
     if ($previous) {
         foreach ($path in @('/NotepadPlus/Languages/Language', '/NotepadPlus/LexerStyles/LexerType')) {
             $oldLanguage = $previous.SelectSingleNode($path)
@@ -91,7 +98,7 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot) {
             $old = $oldStyles.SelectSingleNode("./WordsStyle[@styleID='$($style.styleID)']")
             $attributes = @('fgColor','bgColor','fontName','fontSize','fontStyle','colorStyle')
             if ($null -eq $old) {
-                # New RainCode++ categories keep their syntax colors and use the
+                # New RainSyntax categories keep their syntax colors and use the
                 # imported palette's page background and type settings.
                 $old = $sourceDefault
                 $attributes = @('bgColor','fontName','fontSize')
@@ -109,22 +116,23 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot) {
     Confirm-LexerXml $active
     $payload[$installedXml] = $active
     if ($hasSavedPalette) { $payload[$savedPalette] = $active }
+    Add-PreviousPreferences $payload $config $ConfigRoot
 }
 
 function Add-ProgramFiles($Payload, [string]$Directory, [string]$Architecture) {
-    $plugin = Join-Path $directory 'plugins\RainCodePP'
-    foreach ($name in @('LICENSE','LICENSE-GPL-2.0','LICENSE-Scintilla.txt','README.md','HowToInstall.md','manual.md','Uninstall RainCode++.exe')) {
+    $plugin = Join-Path $directory 'plugins\RainSyntax'
+    foreach ($name in @('LICENSE','LICENSE-GPL-2.0','LICENSE-Scintilla.txt','README.md','HowToInstall.md','manual.md','Uninstall RainSyntax.exe')) {
         $payload[(Join-Path $plugin $name)] = Join-Path $PSScriptRoot $name
     }
     $presets = Join-Path $PSScriptRoot 'Presets'
     $manifest = Join-Path $presets 'Palettes.txt'
     $installedPresets = Join-Path $plugin 'Presets'
     $payload[(Join-Path $installedPresets 'Palettes.txt')] = $manifest
-    foreach ($file in Get-ChildItem -LiteralPath $presets -Filter 'RainCodePP-*.xml' -File) {
+    foreach ($file in Get-ChildItem -LiteralPath $presets -Filter 'RainSyntax-*.xml' -File) {
         $payload[(Join-Path $installedPresets $file.Name)] = $file.FullName
     }
-    $payload[(Join-Path $plugin 'RainCodePPSettings.exe')] = Join-Path $PSScriptRoot "$architecture\RainCodePPSettings.exe"
-    $payload[(Join-Path $plugin 'RainCodePP.dll')] = Join-Path $PSScriptRoot "$architecture\RainCodePP.dll"
+    $payload[(Join-Path $plugin 'RainSyntaxSettings.exe')] = Join-Path $PSScriptRoot "$architecture\RainSyntaxSettings.exe"
+    $payload[(Join-Path $plugin 'RainSyntax.dll')] = Join-Path $PSScriptRoot "$architecture\RainSyntax.dll"
 }
 
 function Install-Files($Payload, [scriptblock]$Verify) {
@@ -169,62 +177,74 @@ function Confirm-LexerXml([string]$Path) {
             !$xml.SelectSingleNode("/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']/WordsStyle[@styleID='0']")) {
             throw 'The Rainmeter 5 language or default style is missing.'
         }
-    } catch { throw "Cannot read the RainCode++ lexer XML at `"$Path`". $($_.Exception.Message)" }
+    } catch { throw "Cannot read the RainSyntax lexer XML at `"$Path`". $($_.Exception.Message)" }
 }
 
-function Install-RainLexer {
+function Install-RainSyntax {
     if ($ProgramFilesOnly -and !(Test-Administrator)) { throw 'The program files step requires administrator rights.' }
     $directory = (Resolve-Path -LiteralPath $NppDirectory).Path
     $exe = Join-Path $directory 'notepad++.exe'
     if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Choose the folder containing notepad++.exe.' }
     if ([version](Get-Item -LiteralPath $exe).VersionInfo.FileVersion -lt [version]'8.4') {
-        throw 'RainCode++ requires Notepad++ 8.4 or later.'
+        throw 'RainSyntax requires Notepad++ 8.4 or later.'
     }
     $architecture = Get-NotepadArchitecture $exe
     $portable = Test-Path -LiteralPath (Join-Path $directory 'doLocalConf.xml') -PathType Leaf
-    $appXml = Join-Path $directory 'plugins\Config\RainCodePP.xml'
+    $appXml = Join-Path $directory 'plugins\Config\RainSyntax.xml'
     if (!$portable -and (Test-Path -LiteralPath $appXml)) {
         throw "Notepad++ will load `"$appXml`" before the per-user lexer XML. Move that file to a backup location and run Setup again."
     }
-    $settingsApp = Join-Path $directory 'plugins\RainCodePP\RainCodePPSettings.exe'
-    $running = @(Get-NotepadApps $exe $settingsApp)
+    $settingsApp = Join-Path $directory 'plugins\RainSyntax\RainSyntaxSettings.exe'
+    $previousSettingsApp = Join-Path $directory 'plugins\RainCodePP\RainCodePPSettings.exe'
+    $running = @(Get-NotepadApps $exe @($settingsApp,$previousSettingsApp))
     if ($running.Count -gt 0) {
         if (!$CloseRunningApps) {
-            Write-Output 'Notepad++ or RainCode++ Settings is open for this installation.'
+            Write-Output 'Notepad++ or RainSyntax Settings is open for this installation.'
             exit 2
         }
         if (!(Wait-ForNotepadAppsToClose $running)) {
-            Write-Output 'Notepad++ or RainCode++ Settings is still open.'
+            Write-Output 'Notepad++ or RainSyntax Settings is still open.'
             exit 3
         }
     }
 
     $elevate = !$ProgramFilesOnly -and !(Test-ApplicationWritable $directory)
     $profile = if ($portable) { $directory } elseif (!$ProgramFilesOnly) { Get-NotepadProfile $directory }
-    $lexerXml = if ($profile) { Join-Path $profile 'plugins\Config\RainCodePP.xml' }
+    $config = if ($profile) { Join-Path $profile 'plugins\Config' }
+    $lexerXml = if ($config) { Join-Path $config 'RainSyntax.xml' }
+    $writeProfile = $profile -and (!$portable -or !$elevate)
     $payload = [ordered]@{}
-    if ($profile -and (!$portable -or !$elevate)) {
-        Add-ProfileFiles $payload $profile
-        if (!$portable) { Write-ClassicBackup $profile (Get-ProfileBackup $profile) }
+    if ($writeProfile) {
+        Add-ProfileFiles $payload $profile $directory
+        if (!$portable -and !(Test-Path -LiteralPath (Join-Path $config 'RainCodePP-backup'))) {
+            Write-ClassicBackup $profile (Get-ProfileBackup $profile)
+        }
     }
     if (!$elevate) {
-        Write-ClassicBackup $directory (Get-ApplicationBackup $directory)
+        $programPlugins = Join-Path $directory 'plugins'
+        if (!(Test-Path -LiteralPath (Join-Path $programPlugins 'RainCodePP-backup'))) {
+            Write-ClassicBackup $directory (Get-ApplicationBackup $directory)
+        }
         Add-ProgramFiles $payload $directory $architecture
     }
 
     Install-Files $payload {
         # Verify the profile before requesting the separate administrator step.
-        if ($lexerXml -and (!$portable -or !$elevate)) { Confirm-LexerXml $lexerXml }
+        if ($writeProfile) { Confirm-LexerXml $lexerXml }
         if ($elevate) {
-            if (!$SetupExecutable) { throw 'Administrator approval is required. Run RainCode++ Setup to continue.' }
+            if (!$SetupExecutable) { throw 'Administrator approval is required. Run RainSyntax Setup to continue.' }
             Write-Output 'Installing the program files with administrator approval.'
             Invoke-ElevatedInstaller $SetupExecutable ("/S /ProgramFilesOnly /Palette=`"$Palette`" /D=$directory")
             if ($portable) { Confirm-LexerXml $lexerXml }
+        } else {
+            Move-PreviousBackup $programPlugins
+            Retire-PreviousPlugin $directory $portable
         }
     }
-    if ($lexerXml) { Write-Output "Installed RainCode++ ($architecture). Lexer XML: $lexerXml" }
+    if ($writeProfile) { Complete-PreviousProfile $config }
+    if ($lexerXml) { Write-Output "Installed RainSyntax ($architecture). Lexer XML: $lexerXml" }
 }
 
-try { Install-RainLexer }
+try { Install-RainSyntax }
 catch { Write-Output $_.Exception.Message; exit 1 }
 

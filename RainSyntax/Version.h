@@ -1,0 +1,4 @@
+#pragma once
+#define RAINSYNTAX_VERSION_RC 1,0,16,0
+#define RAINSYNTAX_VERSION_STRING "1.0.16.0"
+#define RAINSYNTAX_TITLE L"RainSyntax v1.0.16"

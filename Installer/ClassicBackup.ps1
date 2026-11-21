@@ -5,11 +5,11 @@ function Get-NotepadProfile([string]$Directory) {
     Join-Path $roaming 'Notepad++'
 }
 function Get-ApplicationBackup([string]$Directory) {
-    Join-Path $Directory 'plugins\RainCodePP-backup\Original RainLexer'
+    Join-Path $Directory 'plugins\RainSyntax-backup\Original RainLexer'
 }
 
 function Get-ProfileBackup([string]$Profile) {
-    Join-Path $Profile 'plugins\config\RainCodePP-backup\Original RainLexer'
+    Join-Path $Profile 'plugins\config\RainSyntax-backup\Original RainLexer'
 }
 
 function Get-OrdinaryFiles($Item) {
