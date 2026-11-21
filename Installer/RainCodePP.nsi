@@ -10,11 +10,11 @@ SetCompressor /SOLID lzma
 !define PBS_MARQUEE 0x08
 
 Name "RainCode++ for Notepad++"
-OutFile "..\out\RainCode++-1.0.15-Setup.exe"
-VIProductVersion "1.0.15.0"
+OutFile "..\out\RainCode++-1.0.16-Setup.exe"
+VIProductVersion "1.0.16.0"
 VIAddVersionKey "ProductName" "RainCode++"
 VIAddVersionKey "FileDescription" "RainCode++ Setup for Notepad++"
-VIAddVersionKey "FileVersion" "1.0.15"
+VIAddVersionKey "FileVersion" "1.0.16"
 VIAddVersionKey "LegalCopyright" "Copyright 2026 Jeffrey Morley. Based on RainLexer by the Rainmeter Team."
 !define MUI_DIRECTORYPAGE_TEXT_TOP "Choose the folder containing notepad++.exe. Setup installs or updates RainCode++ in that copy of Notepad++."
 !define MUI_FINISHPAGE_TEXT "RainCode++ is ready. Open Notepad++ and use Language > Rainmeter 5 or Plugins > RainCode++ > Settings sidebar."
@@ -202,7 +202,7 @@ close_apps:
     ${IfNot} ${FileExists} "$INSTDIR\doLocalConf.xml"
         SetRegView 64
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "DisplayName" "RainCode++ for Notepad++"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "DisplayVersion" "1.0.15"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "DisplayVersion" "1.0.16"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "InstallLocation" "$INSTDIR"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "UninstallString" '"$INSTDIR\plugins\RainCodePP\Uninstall RainCode++.exe"'
         WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "NoModify" 1

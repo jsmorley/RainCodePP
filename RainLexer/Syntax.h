@@ -1,6 +1,7 @@
 // Copyright (c) Rainmeter Team. Source code licensed under GNU GPL v2 (see LICENSE-GPL-2.0).
 #pragma once
 
+#include <optional>
 #include <string>
 #include <span>
 #include <string_view>
@@ -16,7 +17,8 @@ enum Style : unsigned char {
     DeprecatedBang, Character, Pipe, SectionVariable, DollarVariable,
     BangBracket, Argument, String, Operator, Function, Selector,
     EnvironmentVariable, Escaped, Format, Directive, Reference, Color,
-    Red, Green, Blue, AlphaChannel, RelativeStart, RelativeEnd, StyleCount
+    Red, Green, Blue, AlphaChannel, RelativeStart, RelativeEnd,
+    RegularExpression, Url, StyleCount
 };
 
 // Scintilla reserves styles 32 through 39 for the editor.
@@ -32,8 +34,9 @@ struct EditingTerms {
 };
 
 // Styles are indexed by byte, matching Scintilla positions for every supported encoding.
-std::vector<unsigned char> StyleLine(std::string_view line, bool variablesSection);
+std::vector<unsigned char> StyleLine(std::string_view line, bool variablesSection, bool regexSubstitute = false);
 std::string_view SectionName(std::string_view line);
+std::optional<bool> RegexSubstituteSetting(std::string_view line);
 EditingTerms TermsAt(std::string_view line, size_t caret, bool variablesSection);
 struct VocabularyGroup {
     const wchar_t* label;

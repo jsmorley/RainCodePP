@@ -1,0 +1,30 @@
+{2}[Variables]{0}\n
+{9}BaseUrl{4}={47}HTTPS://example.test/v1/{9}#City#{47}/%20#section{0}\n
+{2}[MeasureWeb]{0}\n
+{3}Measure{4}={6}WebParser{0}\n
+{3}URL{4}={47}https://[2001:db8::1]/p%AB%2F?q={16}[@City{21}:{23}EncodeURL{16}]{47}&units={9}#Units#{0}\n
+{3}URL{4}={20}"{47}file://{8}#@#{47}Example Folder/Example.txt{20}"{0}\n
+{3}URL{4}={16}[MeasureParent]{0}\n
+{3}URL{4}={16}[&BaseAddress]{47}/{9}#Path#{47}?id=7{0}\n
+{3}URL{4}={47}https://example.test/{24}%APPDATA%{47}/{17}$SkinW{0}\n
+{3}LeftMouseUpAction{4}={0}["{47}https://example.test/{9}#City#{0}"]{18}[{7}!Redraw{18}]{0}\n
+{3}RightMouseUpAction{4}={18}[{7}!SetOption{0} {28}MeasureWeb{0} {3}URL{0} {20}"{47}https://example.test/{17}[$SkinW]{47}?q={9}[#Query]{20}"{18}]{0}\n
+{3}Text{4}={0}Read {47}http://example.test/Film_(Title){0}, then {47}mailto:hello@example.test{0}.\n
+{3}RegExp{4}={46}https://example\.test/.*${0}\n
+--- folds ---
+0: 0x2400 header
+1: 0x0401
+2: 0x2400 header
+3: 0x0401
+4: 0x0401
+5: 0x0401
+6: 0x0401
+7: 0x0401
+8: 0x0401
+9: 0x0401
+10: 0x0401
+11: 0x0401
+12: 0x0401
+--- out of range ---
+styles: 0
+levels: 0

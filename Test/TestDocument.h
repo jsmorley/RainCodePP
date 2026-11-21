@@ -37,6 +37,7 @@ public:
 	}
 
 	const std::string& Text() const { return m_Text; }
+	void ReplaceByte(size_t position, char value) { m_Text.at(position) = value; }
 	const std::vector<char>& Styles() const { return m_Styles; }
 	const std::vector<int>& Levels() const { return m_Levels; }
 	Sci_Position EndStyled() const { return m_EndStyled; }

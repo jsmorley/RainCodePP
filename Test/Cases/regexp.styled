@@ -1,0 +1,42 @@
+{2}[MeasureRegex]{0}\n
+{3}Measure{4}={6}WebParser{0}\n
+{3}RegExp{4}={20}"{46}(?si)^(?:[[:alpha:]]\d{{2,4}?|\Q[a-z]+\E)${20}"{0}\n
+{3}IfMatch{4}={46}\A(?<code>[^]]+)\s+\k<code>\z{0}\n
+{3}IfMatch2{4}={46}(?x)(?-x:[#])\.[&MeasureName:EscapeRegExp]# spacing comment{0}\n
+{3}RegExpFilter{4}={46}^(?:[#a-z]|[@a-z]|\x{{41}|\p{{L})++${0}\n
+{3}InputRegExp{4}={20}"{46} ^\d{{1,}$ {20}"{0}\n
+{3}InlinePattern3{4}={46}(?#description)(?<=abc).+?{0}\n
+{3}OnUpdateAction{4}={18}[{7}!SetOption{0} {28}MeasureRegex{0} {3}IfMatch2{0} {20}"{46} ^[^\]]{{2,4}$ {20}"{18}][{7}!SetOption{0} {28}MeasureRegex{0} {3}Text{0} {20}"{16}[@LocationAdminDistrict]{20}"{18}]{0}\n
+{3}Substitute{4}={20}"{46}a+{20}"{21}:{20}"{0}plain text{20}"{21},{0} {20}"{46}(?<=a)b{{2,4}{20}"{21}:{20}'{0}replacement, with comma: \\1{20}'{21},{0} {20}'{46}["]+{20}'{21}:{20}"{0}quoted{20}"{0}\n
+{3}IfMatchMode{4}={10}1{0}\n
+{3}RegExpSubstitute{4}={10}1{0}\n
+{3}IfMatch3{4}={46}[#MyPattern]#More#[$SkinW]$SkinH%APPDATA%\b{0}\n
+{3}IfMatch4{4}={46}^[$%]\\[\x41]\s?{0}\n
+{3}IfMatch5{4}={46}[A-Z{0}\n
+{2}[MeasureLiteral]{0}\n
+{3}Measure{4}={6}String{0}\n
+{3}Substitute{4}={20}"{0}a+":"plain text{20}"{0}\n
+{3}RegExpSubstitute{4}={10}0{0}\n
+--- folds ---
+0: 0x2400 header
+1: 0x0401
+2: 0x0401
+3: 0x0401
+4: 0x0401
+5: 0x0401
+6: 0x0401
+7: 0x0401
+8: 0x0401
+9: 0x0401
+10: 0x0401
+11: 0x0401
+12: 0x0401
+13: 0x0401
+14: 0x0401
+15: 0x2400 header
+16: 0x0401
+17: 0x0401
+18: 0x0401
+--- out of range ---
+styles: 0
+levels: 0

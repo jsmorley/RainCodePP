@@ -28,16 +28,16 @@ constexpr UINT_PTR RestartTimer = 1;
 constexpr UINT_PTR OwnerTimer = 2;
 constexpr std::string_view PreviewLines[] = {
     "[Rainmeter]",
-    "Update=1000",
     "; Rainmeter syntax preview",
     "[Variables]",
     "colorBar=235,170,0,255",
     "[MeterCaption]",
     "Meter=String",
     "FontColor=FF8020C8",
-    "Text=[#Title] [&Clock:TimeStamp]",
+    "Text=https://example.com/[#Title] [&Clock:X]",
     "X=(max(180, [$SkinW]) / 2)r",
     "Y=10R",
+    "IfMatch=^(?:[A-Z]\\d{2,4}|none)$",
     "LeftMouseUpAction=[!SetOption Label Text [#Title]]",
 };
 
@@ -327,7 +327,9 @@ constexpr const wchar_t* StyleDescriptions[] = {
     L"The blue component of an RGB or RGBA color.",
     L"The optional alpha component that sets opacity.",
     L"Lowercase r positions X or Y from the previous meter's left or top edge.",
-    L"Uppercase R positions X or Y from the previous meter's right or bottom edge."
+    L"Uppercase R positions X or Y from the previous meter's right or bottom edge.",
+    L"The complete pattern in a regex-valued option.",
+    L"A link value or literal URL. Embedded variables use their own styles."
 };
 static_assert(std::size(StyleDescriptions) == StyleCount);
 

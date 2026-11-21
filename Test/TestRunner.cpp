@@ -47,6 +47,7 @@ bool CheckEditing()
         !suggest("StringAli", "StringAlign", true) &&
         suggest("Formula=max(si", "sin") &&
         suggest("Text=[&Battery:MaxV", "MaxValue") &&
+        suggest("Text=[@MeterCaption:XW", "XW") &&
         suggest("OnUpdateAction=[!Skin:Ref", "Refresh") &&
         correctsTo("meter=String", "meter", "Meter") &&
         correctsTo("FONTCOLOR=255,255,255", "FONTCOLOR", "FontColor") &&
@@ -65,6 +66,27 @@ bool CheckEditing()
         StyleLine("ExtraSkinOption=1", false)[0] == Option;
     ConfigureVocabulary({});
     if (!okay) std::fputs("FAIL vocabulary and editing contexts\n", stderr);
+    return okay;
+}
+
+bool CheckRegexSubstituteEdit()
+{
+    using namespace RainLexer;
+    TestDocument doc("[Measure]\nSubstitute=\"a+\":\"literal\"\nRegExpSubstitute=0\n");
+    const auto flag = doc.Text().find("=0") + 1;
+    const auto pattern = doc.Text().find("a+");
+    auto* lexer = CreateLexer(LexerName);
+    lexer->Lex(0, doc.Length(), 0, &doc);
+    bool okay = doc.StyleAt(pattern) == Default;
+    doc.ReplaceByte(flag, '1');
+    lexer->Lex(flag, 1, 0, &doc);
+    okay = okay && doc.StyleAt(pattern) == ScintillaStyle(RegularExpression) &&
+        doc.StyleAt(doc.Text().find("literal")) == Default;
+    doc.ReplaceByte(flag, '0');
+    lexer->Lex(flag, 1, 0, &doc);
+    okay = okay && doc.StyleAt(pattern) == Default;
+    lexer->Release();
+    if (!okay) std::fputs("FAIL restyling Substitute when RegExpSubstitute changes\n", stderr);
     return okay;
 }
 
@@ -268,7 +290,7 @@ int main(int argc, char* argv[])
 		return 2;
 	}
 
-	int failures = CheckEditing() ? 0 : 1;
+	int failures = (CheckEditing() ? 0 : 1) + (CheckRegexSubstituteEdit() ? 0 : 1);
 	int passes = 0;
 
 	for (int argi = firstCase; argi < argc; ++argi)

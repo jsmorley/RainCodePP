@@ -20,7 +20,7 @@ constexpr std::array Names = {
     "Bang Bracket", "Bang Argument", "Quoted String", "Operator", "Function", "Selector",
     "Environment Variable", "Escaped Reference", "Format Specifier", "Directive", "Reference", "Color",
     "Red Channel", "Green Channel", "Blue Channel", "Alpha Channel",
-    "Relative Start (r)", "Relative End (R)"
+    "Relative Start (r)", "Relative End (R)", "Regular Expression", "URL"
 };
 static_assert(Names.size() == StyleCount);
 
@@ -30,6 +30,66 @@ std::string GetLine(IDocument* doc, Sci_Position line)
     std::string value(static_cast<size_t>(doc->LineEnd(line) - start), '\0');
     if (!value.empty()) doc->GetCharRange(value.data(), start, static_cast<Sci_Position>(value.size()));
     return value;
+}
+
+struct SectionStyles {
+    Sci_Position first;
+    Sci_Position after;
+    int state;
+    bool needsRefresh;
+};
+
+constexpr int VariablesState = 1;
+constexpr int OptionsState = 2;
+constexpr int RegexSubstituteState = 4;
+
+SectionStyles StylesForSection(IDocument* doc, Sci_Position line)
+{
+    auto first = line;
+    auto header = GetLine(doc, first);
+    while (first > 0 && SectionName(header).empty()) header = GetLine(doc, --first);
+    const auto section = SectionName(header);
+    const bool variables = section.size() == 9 &&
+        std::equal(section.begin(), section.end(), "variables",
+            [](char c, char lower) { return c == lower || c == lower - ('a' - 'A'); });
+    bool regexSubstitute = false;
+    bool mixed = false;
+    int knownState = 0;
+    auto after = first;
+    for (; doc->LineStart(after) < doc->Length(); ++after)
+    {
+        const auto value = GetLine(doc, after);
+        if (after != first && !SectionName(value).empty()) break;
+        if (!variables)
+        {
+            if (const auto flag = RegexSubstituteSetting(value)) regexSubstitute = *flag;
+        }
+        if (const int previous = doc->GetLineState(after))
+        {
+            mixed = mixed || (knownState != 0 && knownState != previous);
+            knownState = previous;
+        }
+    }
+    const int state = variables ? VariablesState : OptionsState | (regexSubstitute ? RegexSubstituteState : 0);
+    return {first, after, state, mixed || (knownState != 0 && knownState != state)};
+}
+
+void StyleSection(IDocument* doc, SectionStyles section, Sci_Position line, Sci_Position end)
+{
+    doc->StartStyling(doc->LineStart(line));
+    for (; line < section.after && doc->LineStart(line) < end; ++line)
+    {
+        const auto current = doc->LineStart(line);
+        const auto next = doc->LineStart(line + 1);
+        doc->SetLineState(line, section.state);
+        auto styles = StyleLine(GetLine(doc, line), section.state == VariablesState,
+            (section.state & RegexSubstituteState) != 0);
+        for (auto& style : styles) style = static_cast<unsigned char>(ScintillaStyle(style));
+        if (!styles.empty())
+            doc->SetStyles(static_cast<Sci_Position>(styles.size()), reinterpret_cast<const char*>(styles.data()));
+        const auto eol = next - current - static_cast<Sci_Position>(styles.size());
+        if (eol > 0) doc->SetStyleFor(eol, Default);
+    }
 }
 
 class Lexer final : public ILexer5 {
@@ -47,35 +107,22 @@ class Lexer final : public ILexer5 {
         if (size <= 0 || start >= static_cast<Sci_PositionU>(doc->Length())) return;
         const auto end = std::min(doc->Length(), static_cast<Sci_Position>(start) + size);
         auto line = doc->LineFromPosition(start);
-        bool variables = line > 0 && doc->GetLineState(line - 1) == 1;
-        doc->StartStyling(doc->LineStart(line));
-        for (; doc->LineStart(line) < end;)
+        auto section = StylesForSection(doc, line);
+        if (line > 0 && section.first == line)
         {
-            const auto current = doc->LineStart(line);
-            const auto next = doc->LineStart(line + 1);
-            const auto value = GetLine(doc, line);
-            if (const auto section = SectionName(value); !section.empty())
-            {
-                variables = section.size() == 9 &&
-                    std::equal(section.begin(), section.end(), "variables",
-                        [](char c, char lower) { return c == lower || c == lower - ('a' - 'A'); });
-            }
-            const int previous = doc->GetLineState(line);
-            doc->SetLineState(line, variables ? 1 : 2);
-            auto styles = StyleLine(value, variables);
-            for (auto& style : styles) style = static_cast<unsigned char>(ScintillaStyle(style));
-            if (!styles.empty())
-                doc->SetStyles(static_cast<Sci_Position>(styles.size()), reinterpret_cast<const char*>(styles.data()));
-            const auto eol = next - current - static_cast<Sci_Position>(styles.size());
-            if (eol > 0) doc->SetStyleFor(eol, Default);
-            if (next <= current) break;
-            ++line;
-            if (next >= end)
-            {
-                if (previous == 0 || previous == (variables ? 1 : 2) || next >= doc->Length()) break;
-                // An edit to a section header can change how following assignment keys are read.
-                doc->ChangeLexerState(next, doc->Length());
-            }
+            // A new header can move the flag out of the preceding section.
+            const auto previous = StylesForSection(doc, line - 1);
+            if (previous.needsRefresh) StyleSection(doc, previous, previous.first, doc->LineStart(line));
+        }
+        for (;;)
+        {
+            // RegExpSubstitute may follow its Substitute pairs. If its value changed,
+            // restyle the whole affected section, including lines already on screen.
+            if (section.needsRefresh) StyleSection(doc, section, section.first, doc->LineStart(section.after));
+            else StyleSection(doc, section, line, end);
+            line = section.after;
+            if (doc->LineStart(line) >= end) break;
+            section = StylesForSection(doc, line);
         }
     }
 

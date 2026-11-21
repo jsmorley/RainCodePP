@@ -55,6 +55,7 @@ bool Space(char c) { return c == ' ' || c == '\t'; }
 bool Word(char c) { return Alpha(c) || Digit(c) || c == '_'; }
 bool TermChar(char c) { return Word(c) || c == '-' || c == '@'; }
 char Lower(char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c; }
+bool HexDigit(char c) { return Digit(c) || (Lower(c) >= 'a' && Lower(c) <= 'f'); }
 std::string Lower(View text)
 {
     std::string result(text);
@@ -72,6 +73,23 @@ bool IsColorVariable(View name)
 {
     const auto lower = Lower(name);
     return lower.starts_with("color") || lower.starts_with("tint") || HasColorSuffix(lower);
+}
+
+bool IsRegexOption(View option)
+{
+    return option == "regexp" || option == "ifmatch" || option == "regexpfilter" ||
+        option == "inputregexp" || option == "inlinepattern";
+}
+
+size_t LinkPrefixLength(View value)
+{
+    constexpr View prefixes[] = {"https://", "http://", "ftp://", "file://", "mailto:"};
+    for (const auto prefix : prefixes)
+    {
+        if (value.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), value.begin(),
+            [](char lower, char ch) { return lower == Lower(ch); })) return prefix.size();
+    }
+    return 0;
 }
 
 View Trim(View text)
@@ -240,8 +258,8 @@ public:
             {
                 const bool bang = i + 1 < text.size() && text[i + 1] == '!';
                 if (!brackets.empty() && brackets.back().quote && !bang &&
-                    (i + 1 == text.size() || !(Alpha(text[i + 1]) || Word(text[i + 1]) ||
-                        View("#$&%\\*[").find(text[i + 1]) != Missing))) continue;
+                    (i + 1 == text.size() || !(Word(text[i + 1]) ||
+                        View("@#$&%\\*[").find(text[i + 1]) != Missing))) continue;
                 brackets.push_back({i, bang, 0});
             }
             else if (text[i] == ']' && !brackets.empty())
@@ -253,7 +271,7 @@ public:
         }
     }
 
-    void Parse(bool variablesSection)
+    void Parse(bool variablesSection, bool regexSubstitute = false)
     {
         Range line = TrimRange({0, text.size()});
         if (line.start == line.end) return;
@@ -280,7 +298,9 @@ public:
         const bool variable = variablesSection && !Slice(key).starts_with("@");
         if (variable) Paint(key, UserVariable);
         else option = ReadOption(key);
-        ReadValue(TrimRange({equals + 1, line.end}), option, 0, variable && IsColorVariable(Slice(key)));
+        const auto value = TrimRange({equals + 1, line.end});
+        if (regexSubstitute && option == "substitute") ReadRegexSubstitutions(value);
+        else ReadValue(value, option, 0, variable && IsColorVariable(Slice(key)));
     }
 
     std::vector<unsigned char> styles;
@@ -385,11 +405,23 @@ private:
     void ReadValue(Range range, const std::string& option, unsigned depth, bool colorVariable = false)
     {
         if (range.start == range.end || depth >= 32) return;
+        const bool regex = IsRegexOption(option);
         if (Slice(range).starts_with("\"") && Slice(range).ends_with("\"") && range.end - range.start >= 2)
         {
             Paint({range.start, range.start + 1}, String);
             Paint({range.end - 1, range.end}, String);
-            range = TrimRange({range.start + 1, range.end - 1});
+            range = {range.start + 1, range.end - 1};
+            if (!regex) range = TrimRange(range);
+        }
+        if (regex)
+        {
+            Paint(range, RegularExpression);
+            return;
+        }
+        if (option == "url")
+        {
+            PaintUrl(range, depth);
+            return;
         }
 
         if ((option == "x" || option == "y") && range.start < range.end)
@@ -405,10 +437,8 @@ private:
 
         const bool formula = option == "formula" || option == "ifcondition";
         const bool format = option == "format" || option == "timestampformat";
-        const bool regex = option == "regexp" || option == "ifmatch" || option == "regexpfilter" ||
-            option == "inputregexp" || option == "inlinepattern";
-        const bool literal = format || regex || option == "text" || option == "string" || option == "substitute" ||
-            option == "tooltiptext" || option == "tooltiptitle" || option == "fontface" || option == "url" ||
+        const bool literal = format || option == "text" || option == "string" || option == "substitute" ||
+            option == "tooltiptext" || option == "tooltiptitle" || option == "fontface" ||
             option == "parameter" || option == "program" || option == "filename" ||
             option.ends_with("path") || option.ends_with("action") || option.ends_with("name");
         const bool isShape = option == "shape";
@@ -430,15 +460,112 @@ private:
         if (color && TryColor(range, depth)) return;
         if (references) Paint(range, Reference);
         const bool inlineColor = isInline && Lower(Slice(Term(range.start, range.end))) == "color";
-        Scan(range, {formula, !literal && !references, list, regex, format, isShape, isInline,
-            option == "flags", false, inlineColor, !literal && !references && !isShape && !isInline}, depth);
+        Scan(range, {.formula = formula, .numbers = !literal && !references, .pipes = list,
+            .format = format, .shape = isShape, .inlines = isInline, .flags = option == "flags",
+            .colors = inlineColor, .paths = !literal && !references && !isShape && !isInline}, depth);
     }
 
     struct Context {
-        bool formula = false, numbers = false, pipes = false, regex = false, format = false;
+        bool formula = false, numbers = false, pipes = false, format = false;
         bool shape = false, inlines = false, flags = false, calls = false, colors = false, paths = false;
         Style numericStyle = Number;
     };
+
+    void ReadRegexSubstitutions(Range range)
+    {
+        size_t i = range.start;
+        const auto skipSpace = [&] {
+            while (i < range.end && Space(text[i])) ++i;
+        };
+        const auto token = [&](char separator) {
+            skipSpace();
+            if (i < range.end && (text[i] == '"' || text[i] == '\''))
+            {
+                const size_t open = i;
+                const auto close = std::min(text.find(text[open], open + 1), range.end);
+                Paint({open, open + 1}, String);
+                i = close < range.end ? close + 1 : close;
+                if (close < range.end) Paint({close, i}, String);
+                return Range{open + 1, close};
+            }
+            const size_t start = i;
+            i = std::min(text.find(separator, i), range.end);
+            return TrimRange({start, i});
+        };
+        while (i < range.end)
+        {
+            Paint(token(':'), RegularExpression);
+            skipSpace();
+            if (i == range.end || text[i] != ':') break;
+            Paint({i, i + 1}, Operator);
+            ++i;
+            Scan(token(','), {}, 1);
+            skipSpace();
+            if (i == range.end || text[i] != ',') break;
+            Paint({i, i + 1}, Operator);
+            ++i;
+        }
+    }
+
+    size_t LinkEnd(size_t start, size_t end) const
+    {
+        size_t i = start;
+        unsigned parentheses = 0;
+        for (; i < end; ++i)
+        {
+            const char ch = text[i];
+            if (ch == '[' && closes[i] < end) { i = closes[i]; continue; }
+            if (Space(ch) || View("\"'<>]").find(ch) != Missing || (ch == ')' && !parentheses)) break;
+            if (ch == '(') ++parentheses;
+            else if (ch == ')') --parentheses;
+        }
+        while (i > start && View(".,;").find(text[i - 1]) != Missing) --i;
+        return i;
+    }
+
+    void PaintUrl(Range range, unsigned depth)
+    {
+        Paint(range, Url);
+        const auto prefix = LinkPrefixLength(Slice(range));
+        for (size_t i = range.start + prefix; i < range.end;)
+        {
+            const char ch = text[i];
+            if (ch == '[' && closes[i] < range.end)
+            {
+                if (prefix && i == range.start + prefix)
+                {
+                    const auto address = Slice({i + 1, closes[i]});
+                    const auto ipv6 = address.substr(0, address.find('%'));
+                    if (ipv6.find(':') != View::npos && std::all_of(ipv6.begin(), ipv6.end(),
+                        [](char c) { return HexDigit(c) || c == ':' || c == '.'; }))
+                    {
+                        i = closes[i] + 1;
+                        continue;
+                    }
+                }
+                i = Bracket(i, range.end, depth);
+                continue;
+            }
+            if (View("#$%").find(ch) != Missing)
+            {
+                size_t nameEnd = i + 1;
+                while (nameEnd < range.end && (TermChar(text[nameEnd]) || text[nameEnd] == '*')) ++nameEnd;
+                const auto name = Slice({i + 1, nameEnd});
+                const bool closed = nameEnd < range.end && text[nameEnd] == ch;
+                const bool adjacentPercentEscapes = ch == '%' && name.size() == 2 &&
+                    nameEnd + 2 < range.end && std::all_of(name.begin(), name.end(), HexDigit) &&
+                    HexDigit(text[nameEnd + 1]) && HexDigit(text[nameEnd + 2]);
+                const bool reference = !name.empty() && (ch == '$' ? BuiltInDollar(Lower(name)) :
+                    closed && (ch == '#' || (!Digit(name.front()) && !adjacentPercentEscapes)));
+                if (reference)
+                {
+                    i = ReadLegacyVariable(i, range.end, ch);
+                    continue;
+                }
+            }
+            ++i;
+        }
+    }
 
     size_t FindColorDelimiter(Range range, char delimiter) const
     {
@@ -462,7 +589,7 @@ private:
         const Range digits{range.start + (prefix ? 2U : 0U), range.end};
         const View hex = Slice(digits);
         if ((hex.size() == 6 || hex.size() == 8) &&
-            std::all_of(hex.begin(), hex.end(), [](char c) { return Digit(c) || (Lower(c) >= 'a' && Lower(c) <= 'f'); }))
+            std::all_of(hex.begin(), hex.end(), HexDigit))
         {
             if (prefix) Paint({range.start, digits.start}, Color);
             for (size_t i = 0; i < hex.size() / 2; ++i)
@@ -544,7 +671,7 @@ private:
         return i;
     }
 
-    size_t Bracket(size_t start, size_t end, Context context, unsigned depth)
+    size_t Bracket(size_t start, size_t end, unsigned depth)
     {
         if (start + 1 >= end || depth >= 32) return start + 1;
         const size_t close = closes[start];
@@ -567,7 +694,7 @@ private:
                 if (key == '#') Offer(term, Words().variables);
                 if (key == '$') Offer(term, Words().dollars);
             }
-            if (cursor != Missing && !context.regex && (key == '&' || Alpha(key) || key == '_'))
+            if (cursor != Missing && (key == '&' || Alpha(key) || key == '_' || key == '@'))
             {
                 const size_t colon = text.find(':', body);
                 if (colon < end) Offer(Term(colon + 1, end), Words().selectors, false, false);
@@ -583,8 +710,8 @@ private:
             Paint({start, close + 1}, Escaped);
             return close + 1;
         }
-        if (!explicitVariable && (context.regex ||
-            (!Alpha(key) && !Digit(key) && key != '_' && key != '[' && static_cast<unsigned char>(key) < 128)))
+        if (!explicitVariable && !Word(key) && key != '@' && key != '[' &&
+            static_cast<unsigned char>(key) < 128)
             return start + 1;
         if (key == '\\')
         {
@@ -625,7 +752,8 @@ private:
                 const Range selector = Term(colon + 1, close);
                 if (!Match(selector, Words().selectors, Selector) && selector.end < close && text[selector.end] == '(')
                     Paint(selector, Function);
-                Scan({selector.start == selector.end ? colon + 1 : selector.end, close}, {true, true, false, false, false, false, false, false, true}, depth + 1);
+                Scan({selector.start == selector.end ? colon + 1 : selector.end, close},
+                    {.formula = true, .numbers = true, .calls = true}, depth + 1);
             }
             Scan({body, colon}, {}, depth + 1);
         }
@@ -671,6 +799,17 @@ private:
         for (size_t i = range.start; i < range.end;)
         {
             const char ch = text[i];
+            if (Alpha(ch) && (i == range.start || !Word(text[i - 1])))
+            {
+                const auto prefix = LinkPrefixLength(Slice({i, range.end}));
+                if (prefix)
+                {
+                    const auto end = LinkEnd(i + prefix, range.end);
+                    PaintUrl({i, end}, depth);
+                    i = end;
+                    continue;
+                }
+            }
             if (colorNext && !Space(ch) && ch != '|')
             {
                 colorNext = false;
@@ -681,8 +820,8 @@ private:
                     continue;
                 }
             }
-            if (ch == '[') { i = Bracket(i, range.end, context, depth); continue; }
-            if (ch == '!' && i == range.start && !context.format && !context.regex &&
+            if (ch == '[') { i = Bracket(i, range.end, depth); continue; }
+            if (ch == '!' && i == range.start && !context.format &&
                 (i + 1 == range.end || Alpha(text[i + 1])))
             {
                 ReadBang(i, range.end, depth + 1);
@@ -695,7 +834,7 @@ private:
                 i += count;
                 continue;
             }
-            if (ch == '#' || ch == '$' || (ch == '%' && !context.formula && !context.regex))
+            if (ch == '#' || ch == '$' || (ch == '%' && !context.formula))
             {
                 const size_t next = ReadLegacyVariable(i, range.end, ch);
                 if (next > i) { i = next; continue; }
@@ -718,7 +857,7 @@ private:
                 shapeValue = false;
                 colorNext = context.colors;
             }
-            else if (ch == '%' && i + 1 < range.end && Digit(text[i + 1]) && !context.regex)
+            else if (ch == '%' && i + 1 < range.end && Digit(text[i + 1]))
             {
                 const Range placeholder = Term(i + 1, range.end);
                 Paint({i, placeholder.end}, Reference);
@@ -864,6 +1003,11 @@ private:
                 Paint({raw.start, inner.start}, String);
                 if (closed) Paint({inner.end, raw.end}, String);
             }
+            if (i == value && IsRegexOption(option))
+            {
+                Paint(inner, RegularExpression);
+                continue;
+            }
             inner = TrimRange(inner);
             Paint(inner, Argument);
             if (i == key) option = ReadOption(inner);
@@ -879,7 +1023,7 @@ private:
                 lower == "setoption" || lower == "setoptiongroup" || lower == "writekeyvalue")
                 && i == first && i != key) || (redirected && i == 0);
             if (reference) Paint(inner, Reference);
-            Scan(inner, {false, true, false, false, false, false, false, false, lower.starts_with("commandmeasure") && i > first}, depth + 1);
+            Scan(inner, {.numbers = true, .calls = lower.starts_with("commandmeasure") && i > first}, depth + 1);
         }
     }
 
@@ -965,10 +1109,27 @@ std::string_view SectionName(std::string_view line)
     return Trim(line.substr(1, end - 1));
 }
 
-std::vector<unsigned char> StyleLine(std::string_view line, bool variablesSection)
+std::optional<bool> RegexSubstituteSetting(std::string_view line)
+{
+    const auto equal = line.find('=');
+    if (equal == View::npos) return std::nullopt;
+    const auto key = Trim(line.substr(0, equal));
+    constexpr View name = "regexpsubstitute";
+    if (key.size() != name.size() || !std::equal(key.begin(), key.end(), name.begin(),
+        [](char ch, char lower) { return Lower(ch) == lower; })) return std::nullopt;
+    auto value = Trim(line.substr(equal + 1));
+    if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+        value = Trim(value.substr(1, value.size() - 2));
+    if (value.starts_with('+')) value.remove_prefix(1);
+    int enabled = 0;
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), enabled);
+    return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() && enabled != 0;
+}
+
+std::vector<unsigned char> StyleLine(std::string_view line, bool variablesSection, bool regexSubstitute)
 {
     LineParser parser(line);
-    parser.Parse(variablesSection);
+    parser.Parse(variablesSection, regexSubstitute);
     return std::move(parser.styles);
 }
 

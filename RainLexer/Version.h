@@ -1,5 +1,5 @@
 #pragma once
-#define RAINLEXER_VERSION_RC 1,0,15,0
-#define RAINLEXER_VERSION_STRING "1.0.15.0"
-#define RAINLEXER_TITLE L"RainCode++ v1.0.15"
+#define RAINLEXER_VERSION_RC 1,0,16,0
+#define RAINLEXER_VERSION_STRING "1.0.16.0"
+#define RAINLEXER_TITLE L"RainCode++ v1.0.16"
 

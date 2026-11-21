@@ -41,6 +41,8 @@
             <WordsStyle name="Alpha Channel" styleID="43" fgColor="D8AAF5" bgColor="181F31" fontName="" fontStyle="0" fontSize="" />
             <WordsStyle name="Relative Start (r)" styleID="44" fgColor="F9BA86" bgColor="181F31" fontName="" fontStyle="1" fontSize="" />
             <WordsStyle name="Relative End (R)" styleID="45" fgColor="77DCD6" bgColor="181F31" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Regular Expression" styleID="46" fgColor="E0B6FF" bgColor="181F31" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="URL" styleID="47" fgColor="90D1FF" bgColor="181F31" fontName="" fontStyle="0" fontSize="" />
         </LexerType>
     </LexerStyles>
 </NotepadPlus>

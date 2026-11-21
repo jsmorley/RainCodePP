@@ -40,6 +40,8 @@ STYLES = [
     ("Alpha Channel", "6E4789", "D8AAF5", 0),
     ("Relative Start (r)", "9B4A23", "F9BA86", 1),
     ("Relative End (R)", "075F75", "77DCD6", 1),
+    ("Regular Expression", "71358D", "E0B6FF", 0),
+    ("URL", "095C94", "90D1FF", 0),
 ]
 
 

@@ -138,6 +138,8 @@ inline Palette ReadPalette(const std::filesystem::path& path)
         {L"Alpha Channel", L"6E4789", L"D8AAF5", 0},
         {L"Relative Start (r)", L"9B4A23", L"F9BA86", 1},
         {L"Relative End (R)", L"075F75", L"77DCD6", 1},
+        {L"Regular Expression", L"71358D", L"E0B6FF", 0},
+        {L"URL", L"095C94", L"90D1FF", 0},
     };
     static_assert(std::size(addedStyles) == StyleCount - Red);
     const auto& page = palette[Default];
