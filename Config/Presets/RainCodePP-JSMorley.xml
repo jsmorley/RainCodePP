@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NotepadPlus>
+    <Languages>
+        <Language name="Rainmeter5" ext="ini inc" commentLine=";" commentStart="" commentEnd="" />
+    </Languages>
+    <LexerStyles>
+        <LexerType name="Rainmeter5" desc="Rainmeter 5" ext="ini inc" excluded="no">
+            <WordsStyle name="Default" styleID="0" fgColor="000000" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Comment" styleID="1" fgColor="008040" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="2" fontSize="14" />
+            <WordsStyle name="Section" styleID="2" fgColor="6363B1" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Option" styleID="3" fgColor="547CC0" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Equals" styleID="4" fgColor="757575" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Invalid Value" styleID="5" fgColor="FF0000" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Value" styleID="6" fgColor="547CC0" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Bang" styleID="7" fgColor="00AAB4" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Built-in Variable" styleID="8" fgColor="E65719" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="User Variable" styleID="9" fgColor="E65719" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Number" styleID="10" fgColor="000000" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Deprecated Option" styleID="11" fgColor="0000A0" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="2" fontSize="14" />
+            <WordsStyle name="Deprecated Value" styleID="12" fgColor="0080C0" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="2" fontSize="14" />
+            <WordsStyle name="Deprecated Bang" styleID="13" fgColor="008080" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="2" fontSize="14" />
+            <WordsStyle name="Character Escape" styleID="14" fgColor="E65719" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="List Separator" styleID="15" fgColor="757575" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Section Variable" styleID="16" fgColor="0000FF" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Dollar Variable" styleID="17" fgColor="0000FF" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Bang Bracket" styleID="18" fgColor="00868D" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Bang Argument" styleID="19" fgColor="38475A" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Quoted String" styleID="20" fgColor="507557" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Operator" styleID="21" fgColor="757575" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Function" styleID="22" fgColor="6363B1" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Selector" styleID="23" fgColor="416CAA" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Environment Variable" styleID="24" fgColor="AC4D1C" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Escaped Reference" styleID="25" fgColor="757575" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="2" fontSize="14" />
+            <WordsStyle name="Format Specifier" styleID="26" fgColor="9B4B81" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Directive" styleID="27" fgColor="398196" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Reference" styleID="28" fgColor="516AA1" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Color" styleID="29" fgColor="AC4D1C" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Red Channel" styleID="40" fgColor="A02B40" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Green Channel" styleID="41" fgColor="236837" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Blue Channel" styleID="42" fgColor="215D9A" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Alpha Channel" styleID="43" fgColor="6E4789" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+        </LexerType>
+    </LexerStyles>
+</NotepadPlus>

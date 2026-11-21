@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NotepadPlus>
+    <Languages>
+        <Language name="Rainmeter5" ext="ini inc" commentLine=";" commentStart="" commentEnd="" />
+    </Languages>
+    <LexerStyles>
+        <LexerType name="Rainmeter5" desc="Rainmeter 5" ext="ini inc" excluded="no">
+            <WordsStyle name="Default" styleID="0" fgColor="E2ECE0" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Comment" styleID="1" fgColor="91B799" bgColor="1D2A25" fontName="" fontStyle="2" fontSize="" />
+            <WordsStyle name="Section" styleID="2" fgColor="A7C7FC" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Option" styleID="3" fgColor="A7C7FC" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Equals" styleID="4" fgColor="A6B8A8" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Invalid Value" styleID="5" fgColor="F9A8B7" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Value" styleID="6" fgColor="8EE1BE" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Bang" styleID="7" fgColor="D9B8F3" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Built-in Variable" styleID="8" fgColor="F0B199" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="User Variable" styleID="9" fgColor="F0B199" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Number" styleID="10" fgColor="E7D395" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Deprecated Option" styleID="11" fgColor="A6B8A8" bgColor="1D2A25" fontName="" fontStyle="2" fontSize="" />
+            <WordsStyle name="Deprecated Value" styleID="12" fgColor="A6B8A8" bgColor="1D2A25" fontName="" fontStyle="2" fontSize="" />
+            <WordsStyle name="Deprecated Bang" styleID="13" fgColor="D9B8F3" bgColor="1D2A25" fontName="" fontStyle="2" fontSize="" />
+            <WordsStyle name="Character Escape" styleID="14" fgColor="D9B8F3" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="List Separator" styleID="15" fgColor="A6B8A8" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Section Variable" styleID="16" fgColor="A7C7FC" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Dollar Variable" styleID="17" fgColor="D9B8F3" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Bang Bracket" styleID="18" fgColor="D9B8F3" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Bang Argument" styleID="19" fgColor="A6B8A8" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Quoted String" styleID="20" fgColor="91B799" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Operator" styleID="21" fgColor="A6B8A8" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Function" styleID="22" fgColor="D9B8F3" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Selector" styleID="23" fgColor="8EE1BE" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Environment Variable" styleID="24" fgColor="E7D395" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Escaped Reference" styleID="25" fgColor="A6B8A8" bgColor="1D2A25" fontName="" fontStyle="2" fontSize="" />
+            <WordsStyle name="Format Specifier" styleID="26" fgColor="D9B8F3" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Directive" styleID="27" fgColor="8EE1BE" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Reference" styleID="28" fgColor="A7C7FC" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Color" styleID="29" fgColor="E7D395" bgColor="1D2A25" fontName="" fontStyle="1" fontSize="" />
+            <WordsStyle name="Red Channel" styleID="40" fgColor="FFA3AA" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Green Channel" styleID="41" fgColor="8BDAA0" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Blue Channel" styleID="42" fgColor="9BC8FF" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+            <WordsStyle name="Alpha Channel" styleID="43" fgColor="D8AAF5" bgColor="1D2A25" fontName="" fontStyle="0" fontSize="" />
+        </LexerType>
+    </LexerStyles>
+</NotepadPlus>

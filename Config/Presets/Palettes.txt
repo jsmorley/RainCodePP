@@ -1,0 +1,13 @@
+Light|Clear Skies
+Light|Morning Fog
+Light|Paper Lantern
+Light|Tidal Pool
+Light|Apricot Dawn
+Light|Meadow Glass
+Dark|Midnight Rain
+Dark|Aurora Watch
+Dark|Cinder and Copper
+Dark|Deep Current
+Dark|Violet Hour
+Dark|Forest After Rain
+Example|JSMorley

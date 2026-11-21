@@ -1,0 +1,80 @@
+#include "resource.h"
+#include "Version.h"
+#include <VerRsrc.h>
+#include <windows.h>
+
+#pragma code_page(1252)
+
+///////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION RAINLEXER_VERSION_RC
+ PRODUCTVERSION RAINLEXER_VERSION_RC
+ FILEFLAGSMASK 0x17L
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "FileDescription", "RainCode++ - Notepad++ plugin"
+            VALUE "FileVersion", RAINLEXER_VERSION_STRING
+            VALUE "LegalCopyright", "\xA9 2026 Jeffrey Morley and the Rainmeter Team"
+            VALUE "OriginalFilename", "RainCodePP.dll"
+            VALUE "ProductVersion", RAINLEXER_VERSION_STRING
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_RAINMETER           ICON                    "Rainmeter.ico"
+
+IDD_SETTINGS DIALOGEX 0, 0, 150, 280
+STYLE DS_CONTROL | DS_SETFONT | WS_CHILD | WS_CLIPCHILDREN
+EXSTYLE WS_EX_CONTROLPARENT
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT "Typing assistance", -1, 8, 9, 130, 12
+    CONTROL "Automatic completion", IDC_COMPLETION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 8, 24, 136, 12
+    CONTROL "Correct capitalization", IDC_CORRECTION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 8, 40, 136, 12
+    CONTROL "Correct obvious typos", IDC_TYPOS, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 8, 56, 136, 12
+    LTEXT "Manual completion: Ctrl+Alt+Space", -1, 8, 72, 136, 22
+    PUSHBUTTON "Edit vocabulary and palettes...", IDC_EDIT_SETTINGS, 8, 99, 134, 17, WS_TABSTOP
+    GROUPBOX "Rainmeter", -1, 6, 124, 138, 58
+    PUSHBUTTON "Refresh skin", IDC_REFRESH_SKIN, 13, 138, 60, 16, WS_TABSTOP
+    PUSHBUTTON "Refresh all", IDC_REFRESH_ALL, 77, 138, 60, 16, WS_TABSTOP
+    PUSHBUTTON "Restart Rainmeter", IDC_RESTART_RAINMETER, 13, 159, 124, 16, WS_TABSTOP
+    PUSHBUTTON "Open RainLexer backup", IDC_BACKUP, 8, 193, 134, 16, WS_TABSTOP
+    PUSHBUTTON "Uninstall RainCode++...", IDC_UNINSTALL, 8, 213, 134, 16, WS_TABSTOP
+    PUSHBUTTON "Help", IDC_SHOW_MANUAL, 8, 233, 65, 16, WS_TABSTOP
+    PUSHBUTTON "About", IDC_ABOUT, 77, 233, 65, 16, WS_TABSTOP
+    CONTROL "<a>Notepad++ Style Configurator</a>", IDC_STYLE, "SysLink", WS_TABSTOP, 8, 262, 134, 13
+END
+
+IDD_HELP DIALOGEX 0, 0, 280, 300
+STYLE DS_CONTROL | DS_SETFONT | WS_CHILD | WS_CLIPCHILDREN
+EXSTYLE WS_EX_CONTROLPARENT
+FONT 9, "Segoe UI"
+BEGIN
+END

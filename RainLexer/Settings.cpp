@@ -1,0 +1,1292 @@
+// Copyright (c) Rainmeter Team. Source code licensed under GNU GPL v2 (see LICENSE-GPL-2.0).
+#define NOMINMAX
+#include <Windows.h>
+#include <windowsx.h>
+#include <commdlg.h>
+#include <commctrl.h>
+#include <shellapi.h>
+#include <shlobj.h>
+#include <msxml6.h>
+#include <wrl/client.h>
+#include <comutil.h>
+
+#include "SettingsFiles.h"
+#include "RestartSession.h"
+#include "SettingsResource.h"
+#include "Syntax.h"
+
+#include <algorithm>
+#include <array>
+#include <cwctype>
+#include <optional>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
+
+namespace {
+using namespace RainLexer;
+using Microsoft::WRL::ComPtr;
+using Path = std::filesystem::path;
+constexpr wchar_t StyleFile[] = L"RainCodePP.xml";
+constexpr wchar_t StyleXPath[] = L"/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']/WordsStyle";
+constexpr wchar_t DefaultPreset[] = L"Clear Skies";
+constexpr UINT_PTR RestartTimer = 1;
+constexpr UINT_PTR OwnerTimer = 2;
+constexpr std::string_view PreviewLines[] = {
+    "[Rainmeter]",
+    "Update=1000",
+    "; Rainmeter syntax preview",
+    "[Variables]",
+    "colorBar=235,170,0,255",
+    "[MeterCaption]",
+    "Meter=String",
+    "FontColor=FF8020C8",
+    "Text=[#Title] [&Clock:TimeStamp]",
+    "W=(max(180, [$SkinW]) / 2)",
+    "LeftMouseUpAction=[!SetOption Label Text [#Title]]",
+};
+
+struct StyleSettings {
+    std::wstring name, family, size, colorStyle;
+    COLORREF foreground = RGB(0, 0, 0);
+    COLORREF background = RGB(255, 255, 255);
+    unsigned emphasis = 0;
+};
+using Palette = std::array<StyleSettings, StyleCount>;
+
+std::wstring Wide(std::string_view text)
+{
+    if (text.empty()) return {};
+    const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+        static_cast<int>(text.size()), nullptr, 0);
+    std::wstring result(count, L'\0');
+    if (count) MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+        static_cast<int>(text.size()), result.data(), count);
+    return result;
+}
+
+std::string Utf8(std::wstring_view text)
+{
+    if (text.empty()) return {};
+    const int count = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+        nullptr, 0, nullptr, nullptr);
+    std::string result(count, '\0');
+    if (count) WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+        result.data(), count, nullptr, nullptr);
+    return result;
+}
+
+std::wstring WindowText(HWND window)
+{
+    std::wstring value(GetWindowTextLengthW(window) + 1, L'\0');
+    value.resize(GetWindowTextW(window, value.data(), static_cast<int>(value.size())));
+    return value;
+}
+
+std::wstring ColorCode(COLORREF color)
+{
+    wchar_t text[7]{};
+    swprintf_s(text, L"%02X%02X%02X", GetRValue(color), GetGValue(color), GetBValue(color));
+    return text;
+}
+
+std::optional<COLORREF> ParseHexColor(std::wstring_view value)
+{
+    if (value.size() != 6 || !std::all_of(value.begin(), value.end(), [](wchar_t ch) { return !!iswxdigit(ch); }))
+        return std::nullopt;
+    const auto rgb = wcstoul(std::wstring(value).c_str(), nullptr, 16);
+    return RGB(rgb >> 16, rgb >> 8, rgb);
+}
+
+COLORREF ColorFrom(std::wstring_view value, COLORREF fallback)
+{
+    return ParseHexColor(value).value_or(fallback);
+}
+
+struct ColorPicker {
+    const wchar_t* title;
+    COLORREF color;
+    std::array<COLORREF, 16>& customColors;
+    std::optional<COLORREF> preview;
+    HWND window = nullptr;
+    HWND visualPicker = nullptr;
+
+    void SetHex(COLORREF value) const
+    {
+        const auto code = L"#" + ColorCode(value);
+        SetDlgItemTextW(window, IDC_HEX_COLOR, code.c_str());
+        SendDlgItemMessageW(window, IDC_HEX_COLOR, EM_SETSEL, 0, -1);
+    }
+
+    void UpdatePreview()
+    {
+        const auto input = WindowText(GetDlgItem(window, IDC_HEX_COLOR));
+        std::wstring_view hex = input;
+        while (!hex.empty() && iswspace(hex.front())) hex.remove_prefix(1);
+        while (!hex.empty() && iswspace(hex.back())) hex.remove_suffix(1);
+        if (hex.starts_with(L"#")) hex.remove_prefix(1);
+        preview = ParseHexColor(hex);
+        EnableWindow(GetDlgItem(window, IDOK), preview.has_value());
+        InvalidateRect(GetDlgItem(window, IDC_COLOR_SWATCH), nullptr, FALSE);
+    }
+
+    void Browse()
+    {
+        CHOOSECOLORW choose{sizeof(choose)};
+        choose.hwndOwner = window;
+        choose.rgbResult = preview.value_or(color);
+        choose.lpCustColors = customColors.data();
+        choose.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
+        choose.lCustData = reinterpret_cast<LPARAM>(this);
+        choose.lpfnHook = VisualPickerHook;
+        if (ChooseColorW(&choose)) SetHex(choose.rgbResult);
+        visualPicker = nullptr;
+    }
+
+    void Close() const
+    {
+        if (visualPicker) SendMessageW(visualPicker, WM_CLOSE, 0, 0);
+        if (window) EndDialog(window, IDCANCEL);
+    }
+
+    static UINT_PTR CALLBACK VisualPickerHook(HWND window, UINT message, WPARAM, LPARAM lParam)
+    {
+        if (message == WM_INITDIALOG)
+        {
+            const auto& options = *reinterpret_cast<const CHOOSECOLORW*>(lParam);
+            reinterpret_cast<ColorPicker*>(options.lCustData)->visualPicker = window;
+        }
+        return 0;
+    }
+
+    static INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+        if (message == WM_INITDIALOG)
+        {
+            auto& picker = *reinterpret_cast<ColorPicker*>(lParam);
+            picker.window = window;
+            SetWindowLongPtrW(window, DWLP_USER, lParam);
+            SetWindowTextW(window, picker.title);
+            SendDlgItemMessageW(window, IDC_HEX_COLOR, EM_SETLIMITTEXT, 64, 0);
+            picker.SetHex(picker.color);
+            picker.UpdatePreview();
+            return TRUE;
+        }
+        auto* picker = reinterpret_cast<ColorPicker*>(GetWindowLongPtrW(window, DWLP_USER));
+        if (!picker) return FALSE;
+        if (message == WM_DRAWITEM && wParam == IDC_COLOR_SWATCH)
+        {
+            const auto& draw = *reinterpret_cast<const DRAWITEMSTRUCT*>(lParam);
+            const auto brush = picker->preview ? CreateSolidBrush(*picker->preview) : nullptr;
+            FillRect(draw.hDC, &draw.rcItem, brush ? brush : GetSysColorBrush(COLOR_BTNFACE));
+            if (brush) DeleteObject(brush);
+            return TRUE;
+        }
+        if (message != WM_COMMAND) return FALSE;
+        switch (LOWORD(wParam))
+        {
+        case IDC_HEX_COLOR:
+            if (HIWORD(wParam) == EN_CHANGE) picker->UpdatePreview();
+            return TRUE;
+        case IDC_VISUAL_COLOR:
+            picker->Browse();
+            return TRUE;
+        case IDOK:
+            if (picker->preview)
+            {
+                picker->color = *picker->preview;
+                EndDialog(window, IDOK);
+            }
+            return TRUE;
+        case IDCANCEL:
+            EndDialog(window, IDCANCEL);
+            return TRUE;
+        default:
+            return FALSE;
+        }
+    }
+};
+
+ComPtr<IXMLDOMDocument2> OpenXml(const Path& path)
+{
+    ComPtr<IXMLDOMDocument2> document;
+    CLSID classId{};
+    if (FAILED(CLSIDFromProgID(L"Msxml2.DOMDocument.6.0", &classId)) ||
+        FAILED(CoCreateInstance(classId, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&document))))
+        throw std::runtime_error("Windows XML support is unavailable.");
+    document->put_async(VARIANT_FALSE);
+    document->put_resolveExternals(VARIANT_FALSE);
+    document->put_validateOnParse(VARIANT_FALSE);
+    document->put_preserveWhiteSpace(VARIANT_TRUE);
+    VARIANT_BOOL loaded = VARIANT_FALSE;
+    if (FAILED(document->load(_variant_t(path.c_str()), &loaded)) || !loaded)
+        throw std::runtime_error("Could not read the RainLexer palette XML.");
+    return document;
+}
+
+std::wstring Attribute(IXMLDOMElement* element, const wchar_t* name)
+{
+    _variant_t value;
+    if (FAILED(element->getAttribute(_bstr_t(name), &value)) || value.vt != VT_BSTR || !value.bstrVal)
+        return {};
+    return value.bstrVal;
+}
+
+template<typename Callback>
+std::array<bool, StyleCount> ForStyles(IXMLDOMDocument2* document, Callback callback)
+{
+    ComPtr<IXMLDOMNodeList> nodes;
+    if (FAILED(document->selectNodes(_bstr_t(StyleXPath), &nodes)) || !nodes)
+        throw std::runtime_error("This file does not contain RainCode++ styles.");
+    std::array<bool, StyleCount> seen{};
+    for (;;)
+    {
+        ComPtr<IXMLDOMNode> node;
+        if (nodes->nextNode(&node) != S_OK || !node) break;
+        ComPtr<IXMLDOMElement> style;
+        if (FAILED(node.As(&style))) continue;
+        const auto raw = Attribute(style.Get(), L"styleID");
+        wchar_t* tail = nullptr;
+        const auto styleId = wcstoul(raw.c_str(), &tail, 10);
+        if (raw.empty() || *tail || styleId >= static_cast<unsigned long>(ScintillaStyle(StyleCount))) continue;
+        const auto id = PaletteStyle(static_cast<int>(styleId));
+        if (id < 0) continue;
+        if (seen[id]) throw std::runtime_error("The palette contains a duplicate style.");
+        seen[id] = true;
+        callback(id, style.Get());
+    }
+    if (std::find(seen.begin(), seen.begin() + Red, false) != seen.begin() + Red)
+        throw std::runtime_error("This palette is missing one or more RainCode++ styles.");
+    return seen;
+}
+
+bool IsDark(COLORREF background)
+{
+    const int brightness = 2126 * GetRValue(background) + 7152 * GetGValue(background) + 722 * GetBValue(background);
+    return brightness < 1280000;
+}
+
+Palette ReadPalette(const Path& path)
+{
+    const auto xml = OpenXml(path);
+    Palette palette;
+    const auto seen = ForStyles(xml.Get(), [&](size_t i, IXMLDOMElement* element) {
+        auto& style = palette[i];
+        style.name = Attribute(element, L"name");
+        style.family = Attribute(element, L"fontName");
+        style.size = Attribute(element, L"fontSize");
+        style.colorStyle = Attribute(element, L"colorStyle");
+        style.foreground = ColorFrom(Attribute(element, L"fgColor"), RGB(0, 0, 0));
+        style.background = ColorFrom(Attribute(element, L"bgColor"), RGB(255, 255, 255));
+        style.emphasis = wcstoul(Attribute(element, L"fontStyle").c_str(), nullptr, 10) & 7;
+    });
+    constexpr const wchar_t* names[] = {L"Red Channel", L"Green Channel", L"Blue Channel", L"Alpha Channel"};
+    constexpr const wchar_t* light[] = {L"A02B40", L"236837", L"215D9A", L"6E4789"};
+    constexpr const wchar_t* dark[] = {L"FFA3AA", L"8BDAA0", L"9BC8FF", L"D8AAF5"};
+    const auto& page = palette[Default];
+    const auto& channelColors = IsDark(page.background) ? dark : light;
+    for (size_t i = Red; i < palette.size(); ++i)
+    {
+        if (seen[i]) continue;
+        palette[i] = page;
+        palette[i].name = names[i - Red];
+        palette[i].foreground = ColorFrom(channelColors[i - Red], page.foreground);
+        palette[i].emphasis = 0;
+        palette[i].colorStyle.clear();
+    }
+    return palette;
+}
+
+void CommitFile(const Path& temp, const Path& target)
+{
+    if (!MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        DeleteFileW(temp.c_str());
+        throw std::runtime_error("Could not replace the file. Check its permissions and try again.");
+    }
+}
+
+Path StagingPath(const Path& target)
+{
+    return target.wstring() + L"." + std::to_wstring(GetCurrentProcessId()) + L".tmp";
+}
+
+void SavePalette(const Path& model, const Path& target, const Palette& palette)
+{
+    const auto xml = OpenXml(model);
+    const auto writeStyle = [&](size_t i, IXMLDOMElement* element) {
+        const auto& style = palette[i];
+        const auto set = [&](const wchar_t* name, const std::wstring& value) {
+            if (FAILED(element->setAttribute(_bstr_t(name), _variant_t(value.c_str()))))
+                throw std::runtime_error("Could not update the palette attributes.");
+        };
+        set(L"fgColor", ColorCode(style.foreground));
+        set(L"bgColor", ColorCode(style.background));
+        set(L"fontName", style.family);
+        set(L"fontSize", style.size);
+        set(L"fontStyle", std::to_wstring(style.emphasis));
+        if (!style.colorStyle.empty()) set(L"colorStyle", style.colorStyle);
+        else element->removeAttribute(_bstr_t(L"colorStyle"));
+    };
+    const auto seen = ForStyles(xml.Get(), writeStyle);
+    ComPtr<IXMLDOMNode> lexer;
+    for (size_t i = Red; i < palette.size(); ++i)
+    {
+        if (seen[i]) continue;
+        if (!lexer)
+            xml->selectSingleNode(_bstr_t(L"/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']"), &lexer);
+        ComPtr<IXMLDOMElement> element;
+        if (!lexer || FAILED(xml->createElement(_bstr_t(L"WordsStyle"), &element)) ||
+            FAILED(element->setAttribute(_bstr_t(L"name"), _variant_t(palette[i].name.c_str()))) ||
+            FAILED(element->setAttribute(_bstr_t(L"styleID"), _variant_t(std::to_wstring(ScintillaStyle(static_cast<int>(i))).c_str()))))
+            throw std::runtime_error("Could not create a color channel style.");
+        writeStyle(i, element.Get());
+        ComPtr<IXMLDOMNode> appended;
+        if (FAILED(lexer->appendChild(element.Get(), &appended)))
+            throw std::runtime_error("Could not add the color channel style to the palette.");
+    }
+    const auto temp = StagingPath(target);
+    if (FAILED(xml->save(_variant_t(temp.c_str()))))
+    {
+        DeleteFileW(temp.c_str());
+        throw std::runtime_error("Could not save the palette XML.");
+    }
+    CommitFile(temp, target);
+}
+
+void SetNotepadMode(const Path& configFile, bool dark)
+{
+    const wchar_t* enabled = dark ? L"yes" : L"no";
+    const auto document = OpenXml(configFile);
+    ComPtr<IXMLDOMNode> node;
+    document->selectSingleNode(_bstr_t(L"/NotepadPlus/GUIConfigs/GUIConfig[@name='DarkMode']"), &node);
+    ComPtr<IXMLDOMElement> mode;
+    if (!node || FAILED(node.As(&mode)))
+        throw std::runtime_error("Notepad++ has not saved its light and dark mode preferences yet.");
+    if (Attribute(mode.Get(), L"enable") == enabled && Attribute(mode.Get(), L"enableWindowsMode") != L"yes")
+        return;
+    if (FAILED(mode->setAttribute(_bstr_t(L"enable"), _variant_t(enabled))) ||
+        FAILED(mode->setAttribute(_bstr_t(L"enableWindowsMode"), _variant_t(L"no"))))
+        throw std::runtime_error("Could not set Notepad++ light or dark mode.");
+    const auto temp = StagingPath(configFile);
+    if (FAILED(document->save(_variant_t(temp.c_str()))))
+    {
+        DeleteFileW(temp.c_str());
+        throw std::runtime_error("Could not save Notepad++ light or dark mode.");
+    }
+    CommitFile(temp, configFile);
+}
+
+struct NotepadWindows {
+    const Path& program;
+    std::vector<HWND> windows;
+    std::vector<HANDLE> processes;
+    explicit NotepadWindows(const Path& executable) : program(executable) {}
+
+    static BOOL CALLBACK Find(HWND window, LPARAM data)
+    {
+        auto& found = *reinterpret_cast<NotepadWindows*>(data);
+        wchar_t name[16]{};
+        if (!GetClassNameW(window, name, static_cast<int>(std::size(name))) ||
+            wcscmp(name, L"Notepad++") != 0) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(window, &pid);
+        const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid);
+        if (!process) return TRUE;
+        wchar_t path[32768]{};
+        DWORD size = static_cast<DWORD>(std::size(path));
+        if (QueryFullProcessImageNameW(process, 0, path, &size) &&
+            CompareStringOrdinal(path, -1, found.program.c_str(), -1, TRUE) == CSTR_EQUAL)
+        {
+            found.windows.push_back(window);
+            found.processes.push_back(process);
+        }
+        else CloseHandle(process);
+        return TRUE;
+    }
+};
+
+constexpr const wchar_t* StyleDescriptions[] = {
+    L"Ordinary text and the editor page background.",
+    L"Comment lines beginning with a semicolon.",
+    L"Section headers such as [Rainmeter].",
+    L"Recognized option names such as FontColor.",
+    L"The = between an option and its value.",
+    L"An unrecognized value for an option with fixed choices.",
+    L"A recognized value such as String in Meter=String.",
+    L"A Rainmeter command such as !Refresh.",
+    L"A Rainmeter-supplied #variable#, such as #CURRENTCONFIG#.",
+    L"A skin's own #variable# or variable definition.",
+    L"Numbers in options, formulas, and bang arguments.",
+    L"An option retained for compatibility with older skins.",
+    L"An option value retained for older skins.",
+    L"A Rainmeter command retained for older skins.",
+    L"A numeric character escape such as [\\x20].",
+    L"A pipe that separates items in a list.",
+    L"A bracketed section reference such as [&Clock].",
+    L"A $ variable such as [$SkinW].",
+    L"The brackets that enclose a bang.",
+    L"Text passed as an argument to a bang.",
+    L"Quotes and quoted text in expressions.",
+    L"Formula operators and separators such as + or *.",
+    L"A function name such as max in a formula.",
+    L"A section selector or modifier such as TimeStamp.",
+    L"An environment variable such as %APPDATA%.",
+    L"A reference escaped so Rainmeter leaves it as text.",
+    L"A placeholder in a format string, such as %Y.",
+    L"A directive such as @Include.",
+    L"A named section, measure, or other referenced item.",
+    L"The optional 0x prefix on a hexadecimal color.",
+    L"The red component of an RGB or RGBA color.",
+    L"The green component of an RGB or RGBA color.",
+    L"The blue component of an RGB or RGBA color.",
+    L"The optional alpha component that sets opacity."
+};
+static_assert(std::size(StyleDescriptions) == StyleCount);
+
+class StyleTooltips {
+public:
+    void Attach(HWND combo)
+    {
+        COMBOBOXINFO info{sizeof(info)};
+        if (!GetComboBoxInfo(combo, &info) || !info.hwndList) return;
+        list = info.hwndList;
+        tooltip = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TRANSPARENT, TOOLTIPS_CLASSW,
+            nullptr, WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, combo, nullptr, nullptr, nullptr);
+        if (!tooltip) return;
+        auto tool = Tool();
+        tool.uFlags = TTF_TRACK;
+        tool.lpszText = const_cast<wchar_t*>(StyleDescriptions[Default]);
+        SendMessageW(tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&tool));
+        SetWindowSubclass(list, ListProc, 1, reinterpret_cast<DWORD_PTR>(this));
+    }
+
+    void Hide()
+    {
+        if (list) KillTimer(list, HoverTimer);
+        item = -1;
+        if (tooltip)
+        {
+            auto tool = Tool();
+            SendMessageW(tooltip, TTM_TRACKACTIVATE, FALSE, reinterpret_cast<LPARAM>(&tool));
+        }
+    }
+
+private:
+    static constexpr UINT_PTR HoverTimer = 0x5243;
+    HWND list = nullptr, tooltip = nullptr;
+    int item = -1;
+    POINT position{};
+
+    TOOLINFOW Tool() const
+    {
+        TOOLINFOW tool{sizeof(tool)};
+        tool.hwnd = list;
+        tool.uId = 1;
+        return tool;
+    }
+
+    void Hover(LPARAM coordinates)
+    {
+        const auto hit = SendMessageW(list, LB_ITEMFROMPOINT, 0, coordinates);
+        const POINT point{GET_X_LPARAM(coordinates), GET_Y_LPARAM(coordinates)};
+        RECT row{};
+        const int index = LOWORD(hit);
+        if (HIWORD(hit) || index >= static_cast<int>(std::size(StyleDescriptions)) ||
+            SendMessageW(list, LB_GETITEMRECT, index, reinterpret_cast<LPARAM>(&row)) == LB_ERR ||
+            !PtInRect(&row, point))
+        {
+            Hide();
+            return;
+        }
+        if (item == index) return;
+        Hide();
+        item = index;
+        position = {point.x + 12, row.bottom};
+        ClientToScreen(list, &position);
+        TRACKMOUSEEVENT leave{sizeof(leave), TME_LEAVE, list, 0};
+        TrackMouseEvent(&leave);
+        SetTimer(list, HoverTimer, 400, nullptr);
+    }
+
+    void Show()
+    {
+        KillTimer(list, HoverTimer);
+        if (item < 0 || !IsWindowVisible(list)) return;
+        auto tool = Tool();
+        tool.lpszText = const_cast<wchar_t*>(StyleDescriptions[item]);
+        SendMessageW(tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&tool));
+        SendMessageW(tooltip, TTM_TRACKPOSITION, 0, MAKELPARAM(position.x, position.y));
+        SendMessageW(tooltip, TTM_TRACKACTIVATE, TRUE, reinterpret_cast<LPARAM>(&tool));
+    }
+
+    static LRESULT CALLBACK ListProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam,
+        UINT_PTR id, DWORD_PTR data)
+    {
+        auto& self = *reinterpret_cast<StyleTooltips*>(data);
+        switch (message)
+        {
+        case WM_MOUSEMOVE: self.Hover(lParam); break;
+        case WM_MOUSELEAVE:
+        case WM_MOUSEWHEEL:
+        case WM_VSCROLL: self.Hide(); break;
+        case WM_TIMER:
+            if (wParam == HoverTimer) { self.Show(); return 0; }
+            break;
+        case WM_NCDESTROY:
+            self.Hide();
+            RemoveWindowSubclass(hwnd, ListProc, id);
+            self.list = self.tooltip = nullptr;
+            break;
+        }
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+    }
+};
+
+struct Editor {
+    Path config, plugin, nppSettings;
+    HWND window = nullptr;
+    Palette palette;
+    std::vector<std::string> words;
+    size_t group = 0, style = 0;
+    bool wordsDirty = false, paletteDirty = false, updating = false;
+    std::array<COLORREF, 16> customColors{};
+    ColorPicker* activeColorPicker = nullptr;
+    std::vector<std::wstring> presetNames;
+    std::optional<Palette> presetPreview;
+    std::optional<bool> offeredMode;
+    StyleTooltips styleTooltips;
+    std::optional<Palette> pendingPalette;
+    std::vector<HANDLE> closing;
+    std::vector<Path> restartSessions;
+    std::optional<std::filesystem::file_time_type> nativeSessionBefore;
+    HANDLE ownerProcess = nullptr;
+    DWORD ownerId = 0;
+    ULONGLONG restartDeadline = 0;
+    bool pendingMode = false;
+
+    Editor(Path settings, Path home, Path notepadSettings, DWORD owner) :
+        config(std::move(settings)), plugin(std::move(home)), nppSettings(std::move(notepadSettings)), ownerId(owner) {}
+    ~Editor()
+    {
+        for (HANDLE process : closing) CloseHandle(process);
+        if (ownerProcess) CloseHandle(ownerProcess);
+    }
+    HWND Control(int id) const { return GetDlgItem(window, id); }
+    void Status(const wchar_t* text) const { SetDlgItemTextW(window, IDC_STATUS, text); }
+
+    Path Preset(std::wstring_view name) const
+    {
+        return plugin / L"Presets" / (L"RainCodePP-" + std::wstring(name) + L".xml");
+    }
+    Path ActivePalette() const { return config / StyleFile; }
+    Path Notepad() const { return plugin.parent_path().parent_path() / L"notepad++.exe"; }
+
+    void Init()
+    {
+        if (!ownerId)
+        {
+            const auto program = Notepad();
+            NotepadWindows targets(program);
+            EnumWindows(NotepadWindows::Find, reinterpret_cast<LPARAM>(&targets));
+            if (targets.processes.size() == 1) ownerId = GetProcessId(targets.processes.front());
+            for (HANDLE process : targets.processes) CloseHandle(process);
+        }
+        if (ownerId)
+        {
+            ownerProcess = OpenProcess(SYNCHRONIZE, FALSE, ownerId);
+            if (!ownerProcess || !SetTimer(window, OwnerTimer, 250, nullptr))
+            {
+                EndDialog(window, 0);
+                return;
+            }
+        }
+        words = ReadVocabulary(ReadTextFile(config / VocabularyFile));
+        for (const auto& entry : VocabularyGroups())
+            SendMessageW(Control(IDC_GROUP), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.label));
+        SendMessageW(Control(IDC_GROUP), CB_SETCURSEL, 0, 0);
+        ShowTerms();
+        SendMessageW(Control(IDC_FIND), EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Find a term"));
+        if (std::filesystem::exists(ActivePalette())) palette = ReadPalette(ActivePalette());
+        else palette = ReadPalette(Preset(DefaultPreset));
+        std::istringstream manifest(ReadTextFile(plugin / L"Presets" / L"Palettes.txt"));
+        std::string entry;
+        SendMessageW(Control(IDC_PRESET), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Current palette"));
+        while (std::getline(manifest, entry))
+        {
+            if (entry.ends_with('\r')) entry.pop_back();
+            const auto split = entry.find('|');
+            if (split == std::string::npos || split + 1 == entry.size()) continue;
+            presetNames.push_back(Wide(std::string_view(entry).substr(split + 1)));
+            const auto label = presetNames.back() + L"  (" + Wide(std::string_view(entry).substr(0, split)) + L")";
+            SendMessageW(Control(IDC_PRESET), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+        }
+        SendMessageW(Control(IDC_PRESET), CB_SETCURSEL, 0, 0);
+        for (const auto& item : palette)
+            SendMessageW(Control(IDC_STYLE_ID), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(item.name.c_str()));
+        SendMessageW(Control(IDC_STYLE_ID), CB_SETCURSEL, 0, 0);
+        styleTooltips.Attach(Control(IDC_STYLE_ID));
+        UpdateStyleFields();
+    }
+
+    void ShowTerms()
+    {
+        updating = true;
+        SetDlgItemTextW(window, IDC_TERMS, Wide(words[group]).c_str());
+        updating = false;
+    }
+
+    void RememberTerms() { words[group] = Utf8(WindowText(Control(IDC_TERMS))); }
+
+    void SaveTerms()
+    {
+        RememberTerms();
+        const auto content = WriteVocabulary(words);
+        const auto target = config / VocabularyFile;
+        const auto temp = StagingPath(target);
+        {
+            std::ofstream file(temp, std::ios::binary);
+            file.write(content.data(), static_cast<std::streamsize>(content.size()));
+            file.close();
+            if (!file)
+            {
+                DeleteFileW(temp.c_str());
+                throw std::runtime_error("Could not write the vocabulary file.");
+            }
+        }
+        CommitFile(temp, target);
+        words = ReadVocabulary(content);
+        ShowTerms();
+        wordsDirty = false;
+        Status(L"Vocabulary saved. Restart Notepad++ to use it.");
+    }
+
+    void FindNext()
+    {
+        auto query = WindowText(Control(IDC_FIND));
+        auto text = WindowText(Control(IDC_TERMS));
+        if (query.empty()) return;
+        for (auto& c : query) c = static_cast<wchar_t>(towlower(c));
+        for (auto& c : text) c = static_cast<wchar_t>(towlower(c));
+        DWORD end = 0;
+        SendMessageW(Control(IDC_TERMS), EM_GETSEL, 0, reinterpret_cast<LPARAM>(&end));
+        auto found = text.find(query, end);
+        if (found == std::wstring::npos) found = text.find(query);
+        if (found == std::wstring::npos) { Status(L"No matching term in this category."); return; }
+        SetFocus(Control(IDC_TERMS));
+        SendMessageW(Control(IDC_TERMS), EM_SETSEL, found, found + query.size());
+        SendMessageW(Control(IDC_TERMS), EM_SCROLLCARET, 0, 0);
+        Status(L"");
+    }
+
+    LOGFONTW LogFont(const StyleSettings& item, const StyleSettings& defaults, bool preview = false) const
+    {
+        const UINT dpi = GetDpiForWindow(window);
+        const auto& sizeText = item.size.empty() ? defaults.size : item.size;
+        const int points = _wtoi(sizeText.c_str());
+        const int size = points > 0 ? std::clamp(points, 5, preview ? 18 : 72) : 10;
+        const auto& family = item.family.empty() ? defaults.family : item.family;
+        LOGFONTW font{};
+        font.lfHeight = -MulDiv(size, dpi, 72);
+        font.lfWeight = item.emphasis & 1 ? FW_BOLD : FW_NORMAL;
+        font.lfItalic = (item.emphasis & 2) != 0;
+        font.lfUnderline = (item.emphasis & 4) != 0;
+        wcsncpy_s(font.lfFaceName, family.empty() ? L"Consolas" : family.c_str(), _TRUNCATE);
+        return font;
+    }
+
+    void DrawColorButton(const DRAWITEMSTRUCT& draw) const
+    {
+        const auto& shown = presetPreview ? *presetPreview : palette;
+        const auto& item = shown[style];
+        const auto dc = draw.hDC;
+        const int saved = SaveDC(dc);
+        const auto brush = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+
+        SetDCBrushColor(dc, item.background);
+        FillRect(dc, &draw.rcItem, brush);
+        SetDCBrushColor(dc, GetSysColor(draw.itemState & (ODS_FOCUS | ODS_SELECTED) ? COLOR_HIGHLIGHT : COLOR_3DSHADOW));
+        FrameRect(dc, &draw.rcItem, brush);
+
+        // Keep the button label readable at the control's fixed height.
+        auto font = LogFont(item, shown[Default]);
+        font.lfHeight = -MulDiv(9, GetDpiForWindow(window), 72);
+        const HFONT labelFont = CreateFontIndirectW(&font);
+        if (labelFont) SelectObject(dc, labelFont);
+        SetTextColor(dc, item.foreground);
+        SetBkMode(dc, TRANSPARENT);
+        RECT label = draw.rcItem;
+        InflateRect(&label, -5, -2);
+        if (draw.itemState & ODS_SELECTED) OffsetRect(&label, 1, 1);
+        const auto caption = WindowText(draw.hwndItem);
+        DrawTextW(dc, caption.c_str(), -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        if ((draw.itemState & ODS_FOCUS) && !(draw.itemState & ODS_NOFOCUSRECT))
+        {
+            RECT focus = draw.rcItem;
+            InflateRect(&focus, -3, -3);
+            DrawFocusRect(dc, &focus);
+        }
+        RestoreDC(dc, saved);
+        if (labelFont) DeleteObject(labelFont);
+    }
+
+    void UpdateStyleFields()
+    {
+        const auto& shown = presetPreview ? *presetPreview : palette;
+        const auto& item = shown[style];
+        SetDlgItemTextW(window, IDC_FOREGROUND, (L"Foreground #" + ColorCode(item.foreground)).c_str());
+        SetDlgItemTextW(window, IDC_BACKGROUND, (L"Background #" + ColorCode(item.background)).c_str());
+        const bool dark = IsDark(shown[Default].background);
+        if (offeredMode != dark)
+        {
+            offeredMode = dark;
+            CheckDlgButton(window, IDC_MATCH_MODE, BST_UNCHECKED);
+            SetDlgItemTextW(window, IDC_MATCH_MODE, dark ?
+                L"Also switch Notepad++ to dark mode" : L"Also switch Notepad++ to light mode");
+        }
+        UpdatePaletteActions();
+        InvalidateRect(Control(IDC_FOREGROUND), nullptr, TRUE);
+        InvalidateRect(Control(IDC_BACKGROUND), nullptr, TRUE);
+        InvalidateRect(Control(IDC_PREVIEW), nullptr, TRUE);
+    }
+
+    void UpdatePaletteActions() const
+    {
+        const bool editingPalette = !presetPreview && !pendingPalette;
+        for (const int id : {IDC_FOREGROUND, IDC_BACKGROUND, IDC_FONT, IDC_INHERIT_FONT, IDC_EXPORT, IDC_MATCH_MODE})
+            EnableWindow(Control(id), editingPalette);
+        EnableWindow(Control(IDC_USE_PRESET), presetPreview.has_value() && !pendingPalette);
+        EnableWindow(Control(IDC_APPLY), !presetPreview);
+    }
+
+    void ShowCurrent()
+    {
+        presetPreview.reset();
+        SendMessageW(Control(IDC_PRESET), CB_SETCURSEL, 0, 0);
+        UpdateStyleFields();
+    }
+
+    void PreviewPreset()
+    {
+        const auto index = SendMessageW(Control(IDC_PRESET), CB_GETCURSEL, 0, 0);
+        if (index <= 0 || static_cast<size_t>(index) > presetNames.size())
+        {
+            ShowCurrent();
+            Status(L"");
+            return;
+        }
+        presetPreview = ReadPalette(Preset(presetNames[static_cast<size_t>(index - 1)]));
+        UpdateStyleFields();
+        Status(L"Choose Use preset to apply these colors and optionally switch Notepad++ mode.");
+    }
+
+    void DrawPreview(const DRAWITEMSTRUCT& draw) const
+    {
+        const auto& colors = presetPreview ? *presetPreview : palette;
+        HBRUSH background = CreateSolidBrush(colors[Default].background);
+        FillRect(draw.hDC, &draw.rcItem, background);
+        DeleteObject(background);
+        const int saved = SaveDC(draw.hDC);
+        IntersectClipRect(draw.hDC, draw.rcItem.left, draw.rcItem.top, draw.rcItem.right, draw.rcItem.bottom);
+        SetBkMode(draw.hDC, OPAQUE);
+        SetTextAlign(draw.hDC, TA_LEFT | TA_TOP);
+        std::array<HFONT, StyleCount> fonts{};
+        const auto original = GetCurrentObject(draw.hDC, OBJ_FONT);
+        const auto dpi = GetDpiForWindow(window);
+        const int margin = MulDiv(9, dpi, 96);
+        int y = draw.rcItem.top + margin;
+        bool variables = false;
+        for (const auto line : PreviewLines)
+        {
+            int x = draw.rcItem.left + margin;
+            int height = 0;
+            if (const auto section = SectionName(line); !section.empty())
+                variables = section == "Variables";
+            const auto runs = StyleLine(line, variables);
+            for (size_t i = 0; i < line.size();)
+            {
+                size_t end = i + 1;
+                while (end < line.size() && runs[end] == runs[i]) ++end;
+                const auto styleId = runs[i];
+                const auto& item = colors[styleId];
+                if (!fonts[styleId])
+                {
+                    const auto font = LogFont(item, colors[Default], true);
+                    fonts[styleId] = CreateFontIndirectW(&font);
+                }
+                if (fonts[styleId]) SelectObject(draw.hDC, fonts[styleId]);
+                const auto value = Wide(line.substr(i, end - i));
+                const auto count = static_cast<int>(value.size());
+                SetTextColor(draw.hDC, item.foreground);
+                SetBkColor(draw.hDC, item.background);
+                TextOutW(draw.hDC, x, y, value.data(), count);
+                SIZE measured{};
+                GetTextExtentPoint32W(draw.hDC, value.data(), count, &measured);
+                height = std::max(height, static_cast<int>(measured.cy));
+                x += measured.cx;
+                i = end;
+            }
+            y += height + MulDiv(2, dpi, 96);
+        }
+        SelectObject(draw.hDC, original);
+        for (auto font : fonts) if (font) DeleteObject(font);
+        RestoreDC(draw.hDC, saved);
+    }
+
+    void PickColor(bool foreground)
+    {
+        auto& item = palette[style];
+        auto& selected = foreground ? item.foreground : item.background;
+        ColorPicker picker{foreground ? L"Foreground color" : L"Background color", selected, customColors};
+        activeColorPicker = &picker;
+        const auto result = DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_COLOR_PICKER),
+            window, ColorPicker::Dialog, reinterpret_cast<LPARAM>(&picker));
+        activeColorPicker = nullptr;
+        if (result == IDOK)
+        {
+            selected = picker.color;
+            const int active = item.colorStyle.empty() ? 3 : _wtoi(item.colorStyle.c_str());
+            item.colorStyle = std::to_wstring(active | (foreground ? 1 : 2));
+            paletteDirty = true;
+            ShowCurrent();
+        }
+    }
+
+    void PickFont()
+    {
+        auto font = LogFont(palette[style], palette[Default]);
+        CHOOSEFONTW choose{sizeof(choose)};
+        choose.hwndOwner = window;
+        choose.lpLogFont = &font;
+        choose.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT | CF_LIMITSIZE | CF_EFFECTS;
+        choose.nSizeMin = 5;
+        choose.nSizeMax = 72;
+        choose.rgbColors = palette[style].foreground;
+        if (!ChooseFontW(&choose)) return;
+        auto& item = palette[style];
+        item.family = font.lfFaceName;
+        item.size = std::to_wstring(choose.iPointSize / 10);
+        item.emphasis = (font.lfWeight >= FW_BOLD ? 1 : 0) | (font.lfItalic ? 2 : 0) | (font.lfUnderline ? 4 : 0);
+        if (choose.rgbColors != item.foreground)
+        {
+            item.foreground = choose.rgbColors;
+            item.colorStyle = std::to_wstring((item.colorStyle.empty() ? 3 : _wtoi(item.colorStyle.c_str())) | 1);
+        }
+        paletteDirty = true;
+        ShowCurrent();
+    }
+
+    bool ReplacePalette() const
+    {
+        return !paletteDirty || MessageBoxW(window, L"Replace the palette you are editing?",
+            L"RainCode++ Settings", MB_OKCANCEL | MB_ICONQUESTION) == IDOK;
+    }
+
+    void Load(const Path& path, bool active)
+    {
+        if (!ReplacePalette()) return;
+        palette = ReadPalette(path);
+        paletteDirty = !active;
+        ShowCurrent();
+        Status(active ? L"Loaded the active palette." : L"Palette loaded. Edit or apply it when ready.");
+    }
+
+    Path Browse(bool save) const
+    {
+        std::array<wchar_t, 32768> filename{};
+        OPENFILENAMEW dialog{sizeof(dialog)};
+        dialog.hwndOwner = window;
+        dialog.lpstrFile = filename.data();
+        dialog.nMaxFile = static_cast<DWORD>(filename.size());
+        dialog.lpstrFilter = L"RainLexer palette (*.xml)\0*.xml\0\0";
+        dialog.lpstrDefExt = L"xml";
+        dialog.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR |
+            (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+        if (!(save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog))) return {};
+        return filename.data();
+    }
+
+    void CancelRestart()
+    {
+        KillTimer(window, RestartTimer);
+        for (size_t i = 0; i < closing.size(); ++i)
+        {
+            if (i < restartSessions.size())
+            {
+                if (WaitForSingleObject(closing[i], 0) == WAIT_OBJECT_0)
+                    ReopenNotepad(restartSessions[i]);
+                else DeleteFileW(restartSessions[i].c_str());
+            }
+            CloseHandle(closing[i]);
+        }
+        closing.clear();
+        restartSessions.clear();
+        pendingPalette.reset();
+        SetDlgItemTextW(window, IDC_APPLY, L"Apply and restart");
+        EnableDialogEdits(true);
+    }
+
+    void EnableDialogEdits(bool enabled) const
+    {
+        constexpr int edits[] = {IDC_GROUP, IDC_TERMS, IDC_RESET_TERMS, IDC_SAVE_TERMS,
+            IDC_STYLE_ID, IDC_PRESET, IDC_IMPORT, IDC_FIND, IDC_FIND_NEXT, IDC_ACTIVE, IDC_BACKUP, IDC_UNINSTALL};
+        for (const int id : edits) EnableWindow(Control(id), enabled);
+        UpdatePaletteActions();
+    }
+
+    void FinishRestart()
+    {
+        const auto replacement = std::move(*pendingPalette);
+        auto sessions = std::move(restartSessions);
+        restartSessions.clear();
+        const auto nativeSessionAfter = NativeSessionTime();
+        if (sessions.size() == 1 && nativeSessionAfter && nativeSessionAfter != nativeSessionBefore)
+        {
+            // Let Notepad++ use its own session if it wrote it at shutdown. It
+            // also contains untitled tabs and backup data in snapshot mode.
+            DeleteFileW(sessions.front().c_str());
+            sessions.clear();
+        }
+        CancelRestart();
+        const auto active = ActivePalette();
+        const auto reopen = [&] {
+            if (sessions.empty()) return ReopenNotepad();
+            bool opened = true;
+            for (const auto& session : sessions)
+                if (!ReopenNotepad(session)) opened = false;
+            return opened;
+        };
+        try
+        {
+            SavePalette(std::filesystem::exists(active) ? active : Preset(DefaultPreset), active, replacement);
+            paletteDirty = false;
+            if (pendingMode)
+            {
+                try { SetNotepadMode(nppSettings / L"config.xml", IsDark(replacement[Default].background)); }
+                catch (const std::exception& error)
+                {
+                    const auto message = L"The syntax palette was saved. " + Wide(error.what());
+                    MessageBoxW(window, message.c_str(), L"RainCode++ Settings", MB_OK | MB_ICONWARNING);
+                }
+            }
+        }
+        catch (...)
+        {
+            reopen();
+            throw;
+        }
+        if (reopen())
+        {
+            if (ownerProcess) EndDialog(window, 0);
+            else Status(L"Palette applied and Notepad++ reopened.");
+        }
+        else
+        {
+            KillTimer(window, OwnerTimer);
+            Status(L"Palette applied. Could not reopen Notepad++ automatically.");
+        }
+    }
+
+    bool ReopenNotepad(const Path& session = {}) const
+    {
+        const auto executable = Notepad();
+        std::wstring args = L"-multiInst";
+        if (!session.empty()) args += L" -nosession -openSession \"" + session.wstring() + L"\"";
+        return reinterpret_cast<INT_PTR>(ShellExecuteW(window, L"open", executable.c_str(),
+            args.c_str(), executable.parent_path().c_str(), SW_SHOWNORMAL)) > 32;
+    }
+
+    std::optional<std::filesystem::file_time_type> NativeSessionTime() const
+    {
+        std::error_code error;
+        const auto timestamp = std::filesystem::last_write_time(nppSettings / L"session.xml", error);
+        if (error) return std::nullopt;
+        return timestamp;
+    }
+
+    bool SaveRestartSessions()
+    {
+        for (const HANDLE process : closing)
+        {
+            const DWORD pid = GetProcessId(process);
+            const auto session = RestartSessionPath(config, pid, GetCurrentProcessId());
+            HWND bridge = nullptr;
+            while ((bridge = FindWindowExW(HWND_MESSAGE, bridge, RestartWindowClass, nullptr)))
+            {
+                DWORD owner = 0;
+                GetWindowThreadProcessId(bridge, &owner);
+                if (owner == pid) break;
+            }
+            DWORD_PTR saved = FALSE;
+            if (!bridge || !SendMessageTimeoutW(bridge, SaveRestartSessionMessage, reinterpret_cast<WPARAM>(window), 0,
+                SMTO_ABORTIFHUNG | SMTO_BLOCK, 3000, &saved) || !saved ||
+                GetFileAttributesW(session.c_str()) == INVALID_FILE_ATTRIBUTES)
+                return false;
+            restartSessions.push_back(session);
+        }
+        return true;
+    }
+
+    void CheckRestart()
+    {
+        if (!pendingPalette) return;
+        if (std::all_of(closing.begin(), closing.end(), [](HANDLE process) {
+            return WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
+        }))
+        {
+            FinishRestart();
+        }
+        else if (GetTickCount64() >= restartDeadline)
+        {
+            CancelRestart();
+            Status(L"Notepad++ is still open. Apply again when you are ready to restart.");
+        }
+    }
+
+    void CheckOwner()
+    {
+        if (!pendingPalette && ownerProcess && WaitForSingleObject(ownerProcess, 0) == WAIT_OBJECT_0)
+        {
+            if (activeColorPicker) activeColorPicker->Close();
+            EndDialog(window, 0);
+        }
+    }
+
+    void Apply()
+    {
+        if (presetPreview) return;
+        if (pendingPalette)
+        {
+            CancelRestart();
+            Status(L"Restart canceled. The palette was left as it was.");
+            return;
+        }
+        const auto program = Notepad();
+        NotepadWindows targets(program);
+        EnumWindows(NotepadWindows::Find, reinterpret_cast<LPARAM>(&targets));
+        closing = std::move(targets.processes);
+        pendingPalette = palette;
+        pendingMode = IsDlgButtonChecked(window, IDC_MATCH_MODE) == BST_CHECKED;
+        if (closing.empty()) { FinishRestart(); return; }
+        nativeSessionBefore = NativeSessionTime();
+        if (!SaveRestartSessions())
+        {
+            CancelRestart();
+            Status(L"Could not save the open tabs. Notepad++ is still open.");
+            return;
+        }
+        restartDeadline = GetTickCount64() + 60000;
+        SetDlgItemTextW(window, IDC_APPLY, L"Cancel restart");
+        EnableDialogEdits(false);
+        Status(L"Waiting for Notepad++ to close. Save open files if prompted.");
+        if (!SetTimer(window, RestartTimer, 200, nullptr))
+        {
+            CancelRestart();
+            throw std::runtime_error("Could not start the Notepad++ restart.");
+        }
+        for (HWND target : targets.windows) PostMessageW(target, WM_CLOSE, 0, 0);
+    }
+
+    void Close()
+    {
+        if ((wordsDirty || paletteDirty) && MessageBoxW(window,
+            L"Close settings with unapplied vocabulary or palette changes?", L"RainCode++ Settings",
+            MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
+        if (pendingPalette) CancelRestart();
+        EndDialog(window, 0);
+    }
+
+    INT_PTR Command(WORD id, WORD event)
+    {
+        switch (id)
+        {
+        case IDC_PRESET:
+            if (event == CBN_SELCHANGE) PreviewPreset();
+            break;
+        case IDC_USE_PRESET:
+            if (presetPreview && ReplacePalette())
+            {
+                palette = *presetPreview;
+                paletteDirty = true;
+                ShowCurrent();
+                Status(IsDark(palette[Default].background) ?
+                    L"Dark preset ready. You can also switch Notepad++ to dark mode." :
+                    L"Light preset ready. You can also switch Notepad++ to light mode.");
+            }
+            break;
+        case IDC_GROUP:
+            if (event == CBN_SELCHANGE)
+            {
+                RememberTerms();
+                group = static_cast<size_t>(SendMessageW(Control(id), CB_GETCURSEL, 0, 0));
+                ShowTerms();
+            }
+            break;
+        case IDC_TERMS:
+            if (event == EN_CHANGE && !updating) wordsDirty = true;
+            break;
+        case IDC_FIND_NEXT: FindNext(); break;
+        case IDC_RESET_TERMS:
+            if (MessageBoxW(window, L"Restore the built-in terms for this category?",
+                L"RainCode++ Settings", MB_OKCANCEL | MB_ICONQUESTION) == IDOK)
+            {
+                words[group] = ReadVocabulary({})[group];
+                wordsDirty = true;
+                ShowTerms();
+            }
+            break;
+        case IDC_SAVE_TERMS: SaveTerms(); break;
+        case IDC_STYLE_ID:
+            if (event == CBN_CLOSEUP) styleTooltips.Hide();
+            if (event == CBN_SELCHANGE)
+            {
+                style = static_cast<size_t>(SendMessageW(Control(id), CB_GETCURSEL, 0, 0));
+                UpdateStyleFields();
+            }
+            break;
+        case IDC_FOREGROUND: PickColor(true); break;
+        case IDC_BACKGROUND: PickColor(false); break;
+        case IDC_FONT: PickFont(); break;
+        case IDC_INHERIT_FONT:
+            palette[style].family.clear();
+            palette[style].size.clear();
+            paletteDirty = true;
+            ShowCurrent();
+            break;
+        case IDC_ACTIVE: Load(ActivePalette(), true); break;
+        case IDC_IMPORT:
+            if (const auto path = Browse(false); !path.empty()) Load(path, false);
+            break;
+        case IDC_EXPORT:
+            if (const auto path = Browse(true); !path.empty())
+            {
+                std::error_code error;
+                if (std::filesystem::equivalent(path, ActivePalette(), error))
+                {
+                    Status(L"Use Apply to Notepad++ to replace the active palette.");
+                    break;
+                }
+                SavePalette(Preset(DefaultPreset), path, palette);
+                paletteDirty = false;
+                Status(L"Palette saved.");
+            }
+            break;
+        case IDC_APPLY: Apply(); break;
+        case IDC_BACKUP:
+            if (const auto folder = ClassicBackup(config, plugin); !folder.empty())
+                ShellExecuteW(window, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            else Status(L"Setup did not find any original RainLexer files to back up.");
+            break;
+        case IDC_UNINSTALL:
+        {
+            const auto path = plugin / UninstallerFile;
+            const auto result = ShellExecuteW(window, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            if (reinterpret_cast<INT_PTR>(result) == ERROR_FILE_NOT_FOUND)
+                Status(L"The uninstaller is missing. Run setup to restore it.");
+            break;
+        }
+        case IDCANCEL: Close(); break;
+        default: return FALSE;
+        }
+        return TRUE;
+    }
+};
+
+INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    auto* editor = reinterpret_cast<Editor*>(GetWindowLongPtrW(window, DWLP_USER));
+    try
+    {
+        if (message == WM_INITDIALOG)
+        {
+            editor = reinterpret_cast<Editor*>(lParam);
+            editor->window = window;
+            SetWindowLongPtrW(window, DWLP_USER, lParam);
+            if (HICON icon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1)))
+                SendMessageW(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
+            editor->Init();
+            return TRUE;
+        }
+        if (!editor) return FALSE;
+        if (message == WM_COMMAND) return editor->Command(LOWORD(wParam), HIWORD(wParam));
+        if (message == WM_CLOSE) { editor->Close(); return TRUE; }
+        if (message == WM_TIMER && wParam == RestartTimer) { editor->CheckRestart(); return TRUE; }
+        if (message == WM_TIMER && wParam == OwnerTimer) { editor->CheckOwner(); return TRUE; }
+        if (message == WM_DRAWITEM && (wParam == IDC_FOREGROUND || wParam == IDC_BACKGROUND))
+        {
+            editor->DrawColorButton(*reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
+            return TRUE;
+        }
+        if (message == WM_DRAWITEM && wParam == IDC_PREVIEW)
+        {
+            editor->DrawPreview(*reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
+            return TRUE;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        const auto error = Wide(e.what());
+        MessageBoxW(window, error.c_str(), L"RainCode++ Settings", MB_OK | MB_ICONERROR);
+        if (message == WM_INITDIALOG) EndDialog(window, 1);
+        return TRUE;
+    }
+    return FALSE;
+}
+}
+
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
+{
+    if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 1;
+    wchar_t executable[32768]{};
+    GetModuleFileNameW(instance, executable, static_cast<DWORD>(std::size(executable)));
+    const auto plugin = Path(executable).parent_path();
+    int count = 0;
+    auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);
+    int result = 1;
+    Path config;
+    Path nppSettings;
+    DWORD owner = 0;
+    if (arguments && count >= 3 && count % 2 != 0)
+    {
+        for (int i = 1; i + 1 < count; i += 2)
+        {
+            const std::wstring_view name(arguments[i]);
+            if (name == L"--config") config = arguments[i + 1];
+            else if (name == L"--npp-settings") nppSettings = arguments[i + 1];
+            else if (name == L"--owner") owner = wcstoul(arguments[i + 1], nullptr, 10);
+        }
+    }
+    else if (count == 1)
+    {
+        const auto home = plugin.parent_path().parent_path();
+        if (std::filesystem::exists(home / L"doLocalConf.xml")) config = home / L"plugins" / L"config";
+        else
+        {
+            wchar_t appData[MAX_PATH]{};
+            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, appData)))
+                config = Path(appData) / L"Notepad++" / L"plugins" / L"config";
+        }
+    }
+    if (!config.empty())
+    {
+        if (nppSettings.empty())
+        {
+            auto directory = config.lexically_normal();
+            if (!directory.has_filename()) directory = directory.parent_path();
+            nppSettings = directory.parent_path().parent_path();
+        }
+        Editor editor(config, plugin, nppSettings, owner);
+        result = static_cast<int>(DialogBoxParamW(instance, MAKEINTRESOURCEW(IDD_EDITOR), nullptr,
+            Dialog, reinterpret_cast<LPARAM>(&editor)));
+    }
+    else
+    {
+        MessageBoxW(nullptr, L"Open this app from the RainCode++ settings sidebar in Notepad++.",
+            L"RainCode++ Settings", MB_OK | MB_ICONINFORMATION);
+    }
+    if (arguments) LocalFree(arguments);
+    CoUninitialize();
+    return result;
+}
+
