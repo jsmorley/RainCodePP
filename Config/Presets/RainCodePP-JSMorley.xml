@@ -39,6 +39,8 @@
             <WordsStyle name="Green Channel" styleID="41" fgColor="236837" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
             <WordsStyle name="Blue Channel" styleID="42" fgColor="215D9A" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
             <WordsStyle name="Alpha Channel" styleID="43" fgColor="6E4789" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="0" fontSize="14" />
+            <WordsStyle name="Relative Start (r)" styleID="44" fgColor="9B4A23" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
+            <WordsStyle name="Relative End (R)" styleID="45" fgColor="075F75" bgColor="FFFFFF" fontName="DejaVu Sans Mono" fontStyle="1" fontSize="14" />
         </LexerType>
     </LexerStyles>
 </NotepadPlus>

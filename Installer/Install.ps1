@@ -54,12 +54,15 @@ function Install-RainLexer {
     $config = Join-Path $configRoot 'plugins\config'
     $plugin = Join-Path $directory 'plugins\RainCodePP'
     $installedXml = Join-Path $config 'RainCodePP.xml'
+    $savedPalette = Join-Path $config 'RainCodePP-palette.xml'
     $classicXml = Join-Path $config 'RainLexer.xml'
     $oldStyles = $null
     $selected = $Palette
     $previous = if (Test-Path -LiteralPath $installedXml -PathType Leaf) { Read-StyleXml $installedXml }
-    if ($Palette -in @('Keep Current Style','Keep') -and $previous) {
-        $oldStyles = $previous.SelectSingleNode("/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']")
+    $hasSavedPalette = Test-Path -LiteralPath $savedPalette -PathType Leaf
+    if ($Palette -in @('Keep Current Style','Keep') -and ($previous -or $hasSavedPalette)) {
+        $source = if ($hasSavedPalette) { Read-StyleXml $savedPalette } else { $previous }
+        $oldStyles = $source.SelectSingleNode("/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']")
     } elseif ($Palette -eq 'Keep Current Style') {
         if (-not (Test-Path -LiteralPath $classicXml -PathType Leaf)) {
             throw 'RainLexer.xml could not be found in the selected Notepad++ profile.'
@@ -132,6 +135,7 @@ function Install-RainLexer {
     }
     $payload[(Join-Path $plugin 'RainCodePPSettings.exe')] = Join-Path $PSScriptRoot "$architecture\RainCodePPSettings.exe"
     $payload[$installedXml] = Join-Path $PSScriptRoot 'active.xml'
+    if ($hasSavedPalette) { $payload[$savedPalette] = Join-Path $PSScriptRoot 'active.xml' }
     $payload[(Join-Path $plugin 'RainCodePP.dll')] = Join-Path $PSScriptRoot "$architecture\RainCodePP.dll"
 
     $suffix = [guid]::NewGuid().ToString('N')

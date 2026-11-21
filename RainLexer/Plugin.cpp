@@ -8,6 +8,7 @@
 #include "resource.h"
 #include "Syntax.h"
 #include "SettingsFiles.h"
+#include "Palette.h"
 #include "RestartSession.h"
 #include "SkinCommands.h"
 #include "HelpPanel.h"
@@ -30,6 +31,7 @@ bool typoCorrection = true;
 bool editing = false;
 bool ready = false;
 UINT_PTR backgroundTimer = 0;
+std::optional<Palette> livePalette;
 HWND panel = nullptr;
 HWND restartWindow = nullptr;
 HWND helpPanel = nullptr, helpText = nullptr;
@@ -110,16 +112,69 @@ bool IsRainmeter(HWND view)
     return std::strcmp(language, LexerName) == 0;
 }
 
+bool ReloadLivePalette()
+{
+    if (configPath.empty()) return false;
+    const auto path = configPath / LivePaletteFile;
+    if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) return false;
+    const auto initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(initialized) && initialized != RPC_E_CHANGED_MODE) return false;
+    bool loaded = false;
+    try
+    {
+        livePalette = ReadPalette(path);
+        loaded = true;
+    }
+    catch (const std::exception&) {}
+    if (SUCCEEDED(initialized)) CoUninitialize();
+    return loaded;
+}
+
+void ApplyLiveStyles(HWND view, LRESULT baseBackground)
+{
+    const auto baseForeground = Editor(view, SCI_STYLEGETFORE, STYLE_DEFAULT);
+    const auto baseSize = Editor(view, SCI_STYLEGETSIZE, STYLE_DEFAULT);
+    std::string baseFont(static_cast<size_t>(Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT)) + 1, '\0');
+    Editor(view, SCI_STYLEGETFONT, STYLE_DEFAULT, reinterpret_cast<LPARAM>(baseFont.data()));
+    for (int i = 0; i < StyleCount; ++i)
+    {
+        const auto& style = (*livePalette)[i];
+        const auto id = ScintillaStyle(i);
+        const unsigned colors = style.colorStyle.empty() ? 3 : _wtoi(style.colorStyle.c_str());
+        const auto font = style.family.empty() ? baseFont : Utf8(style.family);
+        const int size = _wtoi(style.size.c_str());
+        Editor(view, SCI_STYLESETFORE, id, (colors & 1) ? style.foreground : baseForeground);
+        Editor(view, SCI_STYLESETBACK, id, (colors & 2) ? style.background : baseBackground);
+        Editor(view, SCI_STYLESETFONT, id, reinterpret_cast<LPARAM>(font.c_str()));
+        Editor(view, SCI_STYLESETSIZE, id, size > 0 ? size : baseSize);
+        Editor(view, SCI_STYLESETBOLD, id, !!(style.emphasis & 1));
+        Editor(view, SCI_STYLESETITALIC, id, !!(style.emphasis & 2));
+        Editor(view, SCI_STYLESETUNDERLINE, id, !!(style.emphasis & 4));
+    }
+}
+
 void CALLBACK SyncPageBackground(HWND, UINT, UINT_PTR timer, DWORD)
 {
     KillTimer(nullptr, timer);
     backgroundTimer = 0;
-    for (HWND view : {npp._scintillaMainHandle, npp._scintillaSecondHandle})
+    struct Canvas {
+        LRESULT base = -1;
+        LRESULT applied = -1;
+    };
+    static Canvas canvases[2];
+    const HWND views[] = {npp._scintillaMainHandle, npp._scintillaSecondHandle};
+    for (size_t i = 0; i < std::size(views); ++i)
     {
-        if (!IsRainmeter(view)) continue;
+        const auto view = views[i];
+        auto& canvas = canvases[i];
+        if (!IsRainmeter(view)) { canvas = {}; continue; }
+        const auto current = Editor(view, SCI_STYLEGETBACK, STYLE_DEFAULT);
+        if (current != canvas.applied) canvas.base = current;
+        if (livePalette) ApplyLiveStyles(view, canvas.base);
         const auto background = Editor(view, SCI_STYLEGETBACK, Default);
-        if (Editor(view, SCI_STYLEGETBACK, STYLE_DEFAULT) != background)
+        if (current != background)
             Editor(view, SCI_STYLESETBACK, STYLE_DEFAULT, background);
+        canvas.applied = background;
     }
 }
 
@@ -391,6 +446,12 @@ HMODULE PluginModule()
 
 LRESULT CALLBACK RestartSessionWindow(HWND window, UINT message, WPARAM sender, LPARAM data)
 {
+    if (message == ReloadLivePaletteMessage)
+    {
+        if (!ReloadLivePalette()) return FALSE;
+        QueuePageBackground();
+        return TRUE;
+    }
     if (message != SaveRestartSessionMessage) return DefWindowProcW(window, message, sender, data);
     DWORD settingsPid = 0;
     if (!GetWindowThreadProcessId(reinterpret_cast<HWND>(sender), &settingsPid) || configPath.empty()) return FALSE;
@@ -602,6 +663,7 @@ extern "C" void beNotified(SCNotification* notification)
             restartWindow = CreateWindowExW(0, RestartWindowClass, nullptr, 0, 0, 0, 0, 0,
                 HWND_MESSAGE, nullptr, module, nullptr);
         RemoveLoadedRestartSession();
+        ReloadLivePalette();
         QueuePageBackground();
         break;
     }

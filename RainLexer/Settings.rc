@@ -32,8 +32,8 @@ BEGIN
     PUSHBUTTON "Load palette...", IDC_IMPORT, 365, 263, 100, 16
     PUSHBUTTON "Save palette as...", IDC_EXPORT, 473, 263, 102, 16
     CONTROL "Match Notepad++ light or dark mode", IDC_MATCH_MODE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 257, 283, 220, 13
-    LTEXT "Your open files can be saved before restart.", -1, 257, 303, 190, 11
-    PUSHBUTTON "Apply and restart", IDC_APPLY, 473, 298, 102, 17
+    LTEXT "Updates open Rainmeter tabs.", IDC_APPLY_HINT, 257, 303, 190, 11
+    PUSHBUTTON "Apply", IDC_APPLY, 473, 298, 102, 17
 
     LTEXT "", IDC_STATUS, 9, 333, 482, 17
     PUSHBUTTON "Open RainLexer backup", IDC_BACKUP, 9, 353, 111, 16

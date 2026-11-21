@@ -16,7 +16,7 @@ enum Style : unsigned char {
     DeprecatedBang, Character, Pipe, SectionVariable, DollarVariable,
     BangBracket, Argument, String, Operator, Function, Selector,
     EnvironmentVariable, Escaped, Format, Directive, Reference, Color,
-    Red, Green, Blue, AlphaChannel, StyleCount
+    Red, Green, Blue, AlphaChannel, RelativeStart, RelativeEnd, StyleCount
 };
 
 // Scintilla reserves styles 32 through 39 for the editor.

@@ -6,14 +6,11 @@
 #include <commctrl.h>
 #include <shellapi.h>
 #include <shlobj.h>
-#include <msxml6.h>
-#include <wrl/client.h>
-#include <comutil.h>
 
+#include "Palette.h"
 #include "SettingsFiles.h"
 #include "RestartSession.h"
 #include "SettingsResource.h"
-#include "Syntax.h"
 
 #include <algorithm>
 #include <array>
@@ -25,10 +22,7 @@
 
 namespace {
 using namespace RainLexer;
-using Microsoft::WRL::ComPtr;
 using Path = std::filesystem::path;
-constexpr wchar_t StyleFile[] = L"RainCodePP.xml";
-constexpr wchar_t StyleXPath[] = L"/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']/WordsStyle";
 constexpr wchar_t DefaultPreset[] = L"Clear Skies";
 constexpr UINT_PTR RestartTimer = 1;
 constexpr UINT_PTR OwnerTimer = 2;
@@ -42,17 +36,10 @@ constexpr std::string_view PreviewLines[] = {
     "Meter=String",
     "FontColor=FF8020C8",
     "Text=[#Title] [&Clock:TimeStamp]",
-    "W=(max(180, [$SkinW]) / 2)",
+    "X=(max(180, [$SkinW]) / 2)r",
+    "Y=10R",
     "LeftMouseUpAction=[!SetOption Label Text [#Title]]",
 };
-
-struct StyleSettings {
-    std::wstring name, family, size, colorStyle;
-    COLORREF foreground = RGB(0, 0, 0);
-    COLORREF background = RGB(255, 255, 255);
-    unsigned emphasis = 0;
-};
-using Palette = std::array<StyleSettings, StyleCount>;
 
 std::wstring Wide(std::string_view text)
 {
@@ -62,17 +49,6 @@ std::wstring Wide(std::string_view text)
     std::wstring result(count, L'\0');
     if (count) MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
         static_cast<int>(text.size()), result.data(), count);
-    return result;
-}
-
-std::string Utf8(std::wstring_view text)
-{
-    if (text.empty()) return {};
-    const int count = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
-        nullptr, 0, nullptr, nullptr);
-    std::string result(count, '\0');
-    if (count) WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
-        result.data(), count, nullptr, nullptr);
     return result;
 }
 
@@ -88,19 +64,6 @@ std::wstring ColorCode(COLORREF color)
     wchar_t text[7]{};
     swprintf_s(text, L"%02X%02X%02X", GetRValue(color), GetGValue(color), GetBValue(color));
     return text;
-}
-
-std::optional<COLORREF> ParseHexColor(std::wstring_view value)
-{
-    if (value.size() != 6 || !std::all_of(value.begin(), value.end(), [](wchar_t ch) { return !!iswxdigit(ch); }))
-        return std::nullopt;
-    const auto rgb = wcstoul(std::wstring(value).c_str(), nullptr, 16);
-    return RGB(rgb >> 16, rgb >> 8, rgb);
-}
-
-COLORREF ColorFrom(std::wstring_view value, COLORREF fallback)
-{
-    return ParseHexColor(value).value_or(fallback);
 }
 
 struct ColorPicker {
@@ -207,96 +170,6 @@ struct ColorPicker {
     }
 };
 
-ComPtr<IXMLDOMDocument2> OpenXml(const Path& path)
-{
-    ComPtr<IXMLDOMDocument2> document;
-    CLSID classId{};
-    if (FAILED(CLSIDFromProgID(L"Msxml2.DOMDocument.6.0", &classId)) ||
-        FAILED(CoCreateInstance(classId, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&document))))
-        throw std::runtime_error("Windows XML support is unavailable.");
-    document->put_async(VARIANT_FALSE);
-    document->put_resolveExternals(VARIANT_FALSE);
-    document->put_validateOnParse(VARIANT_FALSE);
-    document->put_preserveWhiteSpace(VARIANT_TRUE);
-    VARIANT_BOOL loaded = VARIANT_FALSE;
-    if (FAILED(document->load(_variant_t(path.c_str()), &loaded)) || !loaded)
-        throw std::runtime_error("Could not read the RainLexer palette XML.");
-    return document;
-}
-
-std::wstring Attribute(IXMLDOMElement* element, const wchar_t* name)
-{
-    _variant_t value;
-    if (FAILED(element->getAttribute(_bstr_t(name), &value)) || value.vt != VT_BSTR || !value.bstrVal)
-        return {};
-    return value.bstrVal;
-}
-
-template<typename Callback>
-std::array<bool, StyleCount> ForStyles(IXMLDOMDocument2* document, Callback callback)
-{
-    ComPtr<IXMLDOMNodeList> nodes;
-    if (FAILED(document->selectNodes(_bstr_t(StyleXPath), &nodes)) || !nodes)
-        throw std::runtime_error("This file does not contain RainCode++ styles.");
-    std::array<bool, StyleCount> seen{};
-    for (;;)
-    {
-        ComPtr<IXMLDOMNode> node;
-        if (nodes->nextNode(&node) != S_OK || !node) break;
-        ComPtr<IXMLDOMElement> style;
-        if (FAILED(node.As(&style))) continue;
-        const auto raw = Attribute(style.Get(), L"styleID");
-        wchar_t* tail = nullptr;
-        const auto styleId = wcstoul(raw.c_str(), &tail, 10);
-        if (raw.empty() || *tail || styleId >= static_cast<unsigned long>(ScintillaStyle(StyleCount))) continue;
-        const auto id = PaletteStyle(static_cast<int>(styleId));
-        if (id < 0) continue;
-        if (seen[id]) throw std::runtime_error("The palette contains a duplicate style.");
-        seen[id] = true;
-        callback(id, style.Get());
-    }
-    if (std::find(seen.begin(), seen.begin() + Red, false) != seen.begin() + Red)
-        throw std::runtime_error("This palette is missing one or more RainCode++ styles.");
-    return seen;
-}
-
-bool IsDark(COLORREF background)
-{
-    const int brightness = 2126 * GetRValue(background) + 7152 * GetGValue(background) + 722 * GetBValue(background);
-    return brightness < 1280000;
-}
-
-Palette ReadPalette(const Path& path)
-{
-    const auto xml = OpenXml(path);
-    Palette palette;
-    const auto seen = ForStyles(xml.Get(), [&](size_t i, IXMLDOMElement* element) {
-        auto& style = palette[i];
-        style.name = Attribute(element, L"name");
-        style.family = Attribute(element, L"fontName");
-        style.size = Attribute(element, L"fontSize");
-        style.colorStyle = Attribute(element, L"colorStyle");
-        style.foreground = ColorFrom(Attribute(element, L"fgColor"), RGB(0, 0, 0));
-        style.background = ColorFrom(Attribute(element, L"bgColor"), RGB(255, 255, 255));
-        style.emphasis = wcstoul(Attribute(element, L"fontStyle").c_str(), nullptr, 10) & 7;
-    });
-    constexpr const wchar_t* names[] = {L"Red Channel", L"Green Channel", L"Blue Channel", L"Alpha Channel"};
-    constexpr const wchar_t* light[] = {L"A02B40", L"236837", L"215D9A", L"6E4789"};
-    constexpr const wchar_t* dark[] = {L"FFA3AA", L"8BDAA0", L"9BC8FF", L"D8AAF5"};
-    const auto& page = palette[Default];
-    const auto& channelColors = IsDark(page.background) ? dark : light;
-    for (size_t i = Red; i < palette.size(); ++i)
-    {
-        if (seen[i]) continue;
-        palette[i] = page;
-        palette[i].name = names[i - Red];
-        palette[i].foreground = ColorFrom(channelColors[i - Red], page.foreground);
-        palette[i].emphasis = 0;
-        palette[i].colorStyle.clear();
-    }
-    return palette;
-}
-
 void CommitFile(const Path& temp, const Path& target)
 {
     if (!MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
@@ -339,11 +212,11 @@ void SavePalette(const Path& model, const Path& target, const Palette& palette)
         if (!lexer || FAILED(xml->createElement(_bstr_t(L"WordsStyle"), &element)) ||
             FAILED(element->setAttribute(_bstr_t(L"name"), _variant_t(palette[i].name.c_str()))) ||
             FAILED(element->setAttribute(_bstr_t(L"styleID"), _variant_t(std::to_wstring(ScintillaStyle(static_cast<int>(i))).c_str()))))
-            throw std::runtime_error("Could not create a color channel style.");
+            throw std::runtime_error("Could not create a syntax style.");
         writeStyle(i, element.Get());
         ComPtr<IXMLDOMNode> appended;
         if (FAILED(lexer->appendChild(element.Get(), &appended)))
-            throw std::runtime_error("Could not add the color channel style to the palette.");
+            throw std::runtime_error("Could not add the syntax style to the palette.");
     }
     const auto temp = StagingPath(target);
     if (FAILED(xml->save(_variant_t(temp.c_str()))))
@@ -406,6 +279,18 @@ struct NotepadWindows {
     }
 };
 
+HWND FindEditorBridge(DWORD pid)
+{
+    HWND bridge = nullptr;
+    while ((bridge = FindWindowExW(HWND_MESSAGE, bridge, RestartWindowClass, nullptr)))
+    {
+        DWORD owner = 0;
+        GetWindowThreadProcessId(bridge, &owner);
+        if (owner == pid) return bridge;
+    }
+    return nullptr;
+}
+
 constexpr const wchar_t* StyleDescriptions[] = {
     L"Ordinary text and the editor page background.",
     L"Comment lines beginning with a semicolon.",
@@ -440,7 +325,9 @@ constexpr const wchar_t* StyleDescriptions[] = {
     L"The red component of an RGB or RGBA color.",
     L"The green component of an RGB or RGBA color.",
     L"The blue component of an RGB or RGBA color.",
-    L"The optional alpha component that sets opacity."
+    L"The optional alpha component that sets opacity.",
+    L"Lowercase r positions X or Y from the previous meter's left or top edge.",
+    L"Uppercase R positions X or Y from the previous meter's right or bottom edge."
 };
 static_assert(std::size(StyleDescriptions) == StyleCount);
 
@@ -564,7 +451,6 @@ struct Editor {
     HANDLE ownerProcess = nullptr;
     DWORD ownerId = 0;
     ULONGLONG restartDeadline = 0;
-    bool pendingMode = false;
 
     Editor(Path settings, Path home, Path notepadSettings, DWORD owner) :
         config(std::move(settings)), plugin(std::move(home)), nppSettings(std::move(notepadSettings)), ownerId(owner) {}
@@ -580,7 +466,11 @@ struct Editor {
     {
         return plugin / L"Presets" / (L"RainCodePP-" + std::wstring(name) + L".xml");
     }
-    Path ActivePalette() const { return config / StyleFile; }
+    Path ActivePalette() const
+    {
+        const auto saved = config / LivePaletteFile;
+        return std::filesystem::exists(saved) ? saved : config / StyleFile;
+    }
     Path Notepad() const { return plugin.parent_path().parent_path() / L"notepad++.exe"; }
 
     void Init()
@@ -758,6 +648,13 @@ struct Editor {
             EnableWindow(Control(id), editingPalette);
         EnableWindow(Control(IDC_USE_PRESET), presetPreview.has_value() && !pendingPalette);
         EnableWindow(Control(IDC_APPLY), !presetPreview);
+        if (!pendingPalette)
+        {
+            const bool restart = IsDlgButtonChecked(window, IDC_MATCH_MODE) == BST_CHECKED;
+            SetDlgItemTextW(window, IDC_APPLY, restart ? L"Apply and restart" : L"Apply");
+            SetDlgItemTextW(window, IDC_APPLY_HINT, restart ?
+                L"Your open files can be saved before restart." : L"Updates open Rainmeter tabs.");
+        }
     }
 
     void ShowCurrent()
@@ -923,7 +820,6 @@ struct Editor {
         closing.clear();
         restartSessions.clear();
         pendingPalette.reset();
-        SetDlgItemTextW(window, IDC_APPLY, L"Apply and restart");
         EnableDialogEdits(true);
     }
 
@@ -949,7 +845,6 @@ struct Editor {
             sessions.clear();
         }
         CancelRestart();
-        const auto active = ActivePalette();
         const auto reopen = [&] {
             if (sessions.empty()) return ReopenNotepad();
             bool opened = true;
@@ -959,16 +854,13 @@ struct Editor {
         };
         try
         {
-            SavePalette(std::filesystem::exists(active) ? active : Preset(DefaultPreset), active, replacement);
+            SaveActivePalette(replacement);
             paletteDirty = false;
-            if (pendingMode)
+            try { SetNotepadMode(nppSettings / L"config.xml", IsDark(replacement[Default].background)); }
+            catch (const std::exception& error)
             {
-                try { SetNotepadMode(nppSettings / L"config.xml", IsDark(replacement[Default].background)); }
-                catch (const std::exception& error)
-                {
-                    const auto message = L"The syntax palette was saved. " + Wide(error.what());
-                    MessageBoxW(window, message.c_str(), L"RainCode++ Settings", MB_OK | MB_ICONWARNING);
-                }
+                const auto message = L"The syntax palette was saved. " + Wide(error.what());
+                MessageBoxW(window, message.c_str(), L"RainCode++ Settings", MB_OK | MB_ICONWARNING);
             }
         }
         catch (...)
@@ -1011,13 +903,7 @@ struct Editor {
         {
             const DWORD pid = GetProcessId(process);
             const auto session = RestartSessionPath(config, pid, GetCurrentProcessId());
-            HWND bridge = nullptr;
-            while ((bridge = FindWindowExW(HWND_MESSAGE, bridge, RestartWindowClass, nullptr)))
-            {
-                DWORD owner = 0;
-                GetWindowThreadProcessId(bridge, &owner);
-                if (owner == pid) break;
-            }
+            const HWND bridge = FindEditorBridge(pid);
             DWORD_PTR saved = FALSE;
             if (!bridge || !SendMessageTimeoutW(bridge, SaveRestartSessionMessage, reinterpret_cast<WPARAM>(window), 0,
                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 3000, &saved) || !saved ||
@@ -1053,6 +939,34 @@ struct Editor {
         }
     }
 
+    void SaveActivePalette(const Palette& replacement)
+    {
+        const auto model = ActivePalette();
+        SavePalette(std::filesystem::exists(model) ? model : Preset(DefaultPreset),
+            config / LivePaletteFile, replacement);
+        paletteDirty = false;
+    }
+
+    void ApplyLive()
+    {
+        SaveActivePalette(palette);
+        const auto program = Notepad();
+        NotepadWindows targets(program);
+        EnumWindows(NotepadWindows::Find, reinterpret_cast<LPARAM>(&targets));
+        bool notified = false;
+        for (const auto process : targets.processes)
+        {
+            if (const auto bridge = FindEditorBridge(GetProcessId(process)))
+            {
+                DWORD_PTR loaded = FALSE;
+                if (SendMessageTimeoutW(bridge, ReloadLivePaletteMessage, 0, 0,
+                    SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &loaded) && loaded) notified = true;
+            }
+            CloseHandle(process);
+        }
+        Status(notified ? L"Palette applied to Rainmeter tabs." : L"Palette saved for the next Notepad++ launch.");
+    }
+
     void Apply()
     {
         if (presetPreview) return;
@@ -1062,12 +976,16 @@ struct Editor {
             Status(L"Restart canceled. The palette was left as it was.");
             return;
         }
+        if (IsDlgButtonChecked(window, IDC_MATCH_MODE) != BST_CHECKED)
+        {
+            ApplyLive();
+            return;
+        }
         const auto program = Notepad();
         NotepadWindows targets(program);
         EnumWindows(NotepadWindows::Find, reinterpret_cast<LPARAM>(&targets));
         closing = std::move(targets.processes);
         pendingPalette = palette;
-        pendingMode = IsDlgButtonChecked(window, IDC_MATCH_MODE) == BST_CHECKED;
         if (closing.empty()) { FinishRestart(); return; }
         nativeSessionBefore = NativeSessionTime();
         if (!SaveRestartSessions())
@@ -1155,6 +1073,7 @@ struct Editor {
             ShowCurrent();
             break;
         case IDC_ACTIVE: Load(ActivePalette(), true); break;
+        case IDC_MATCH_MODE: UpdatePaletteActions(); break;
         case IDC_IMPORT:
             if (const auto path = Browse(false); !path.empty()) Load(path, false);
             break;
@@ -1162,7 +1081,8 @@ struct Editor {
             if (const auto path = Browse(true); !path.empty())
             {
                 std::error_code error;
-                if (std::filesystem::equivalent(path, ActivePalette(), error))
+                if (std::filesystem::equivalent(path, config / StyleFile, error) ||
+                    std::filesystem::equivalent(path, config / LivePaletteFile, error))
                 {
                     Status(L"Use Apply to Notepad++ to replace the active palette.");
                     break;

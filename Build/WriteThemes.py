@@ -38,6 +38,8 @@ STYLES = [
     ("Green Channel", "236837", "8BDAA0", 0),
     ("Blue Channel", "215D9A", "9BC8FF", 0),
     ("Alpha Channel", "6E4789", "D8AAF5", 0),
+    ("Relative Start (r)", "9B4A23", "F9BA86", 1),
+    ("Relative End (R)", "075F75", "77DCD6", 1),
 ]
 
 

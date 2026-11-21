@@ -19,7 +19,8 @@ constexpr std::array Names = {
     "Deprecated Bang", "Character Escape", "List Separator", "Section Variable", "Dollar Variable",
     "Bang Bracket", "Bang Argument", "Quoted String", "Operator", "Function", "Selector",
     "Environment Variable", "Escaped Reference", "Format Specifier", "Directive", "Reference", "Color",
-    "Red Channel", "Green Channel", "Blue Channel", "Alpha Channel"
+    "Red Channel", "Green Channel", "Blue Channel", "Alpha Channel",
+    "Relative Start (r)", "Relative End (R)"
 };
 static_assert(Names.size() == StyleCount);
 

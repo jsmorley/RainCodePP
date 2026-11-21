@@ -392,6 +392,17 @@ private:
             range = TrimRange({range.start + 1, range.end - 1});
         }
 
+        if ((option == "x" || option == "y") && range.start < range.end)
+        {
+            // Rainmeter interprets only the final character as a positioning suffix.
+            const char suffix = text[range.end - 1];
+            if (suffix == 'r' || suffix == 'R')
+            {
+                Paint({range.end - 1, range.end}, suffix == 'r' ? RelativeStart : RelativeEnd);
+                range = TrimRange({range.start, range.end - 1});
+            }
+        }
+
         const bool formula = option == "formula" || option == "ifcondition";
         const bool format = option == "format" || option == "timestampformat";
         const bool regex = option == "regexp" || option == "ifmatch" || option == "regexpfilter" ||

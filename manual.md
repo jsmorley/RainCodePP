@@ -21,6 +21,8 @@ Section names, option names, formula functions, variables, bang arguments, selec
 
 The red, green, blue, and alpha channels have separate styles in recognized color values such as `FontColor=255,128,32,200` and `FontColor=FF8020C8`. This also works for variables whose names start or end with `Color` or `Tint`, such as `colorBar` and `LabelColor`. Choose a channel under **Set style for syntax types** to customize it.
 
+Relative `X` and `Y` suffixes have separate styles. Lowercase `r` measures from the previous meter’s left or top edge. Uppercase `R` measures from its right or bottom edge. The styles also apply to expressions such as `X=(#Gap# + 2)R` and to position values inside `!SetOption`.
+
 ```ini
 [MeterCaption]
 Meter=String
@@ -40,7 +42,7 @@ Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to previ
 - In **Set style for syntax types**, hover over a choice for a brief description. Select a type to change its foreground, background, font, size, bold, italic, or underline. **Inherit** returns its font face and size to the editor defaults. The **Default** background fills the editor page. Individual syntax categories can use their own backgrounds.
 - Click **Foreground** or **Background** to paste a hex color such as `#4681AD` or `4681AD`. The swatch previews the color before you click **OK**. **Browse colors** opens the visual picker.
 - **Save palette as** exports your palette to XML. **Load palette** opens a saved palette for editing.
-- **Apply and restart** saves the palette, restarts Notepad++, and reopens the files you were editing. Save any open files if Notepad++ prompts you. Check **Also switch Notepad++ to dark mode** or its light equivalent if you want the app mode to match. This selects a manual light or dark mode instead of Follow Windows.
+- **Apply** saves the palette and updates Rainmeter tabs immediately. If you check **Also switch Notepad++ to dark mode** or its light equivalent, the button becomes **Apply and restart**. This selects a manual mode instead of Follow Windows. Save any open files if Notepad++ prompts you before reopening your tabs.
 
 The **Notepad++ Style Configurator** link at the bottom of the sidebar opens the built-in editor for global styles, other languages, and file extensions.
 
