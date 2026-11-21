@@ -6,7 +6,7 @@ RainCode++ adds Rainmeter 5 syntax highlighting and optional typing assistance f
 
 1. Save your work in Notepad++. Setup can ask to close Notepad++ and RainCode++ Settings before it replaces files.
 2. Download the Windows `.exe` from the [RainCode++ releases page](https://github.com/jsmorley/RainCodePP/releases/latest) and run it. The installer is unsigned, so Windows may show an unrecognized publisher prompt.
-3. Select the folder containing the `notepad++.exe` you want to use. For portable Notepad++, select the portable app folder. Setup detects the architecture.
+3. Select the folder containing the `notepad++.exe` you want to use. For portable Notepad++, select the portable app folder. Setup detects the architecture and shows where it will put the lexer XML. For a standard installation, the XML goes into the Windows profile that launched Setup, even if Windows asks for another administrator account to update the program files.
 4. Pick your starting palette. On an upgrade, choose **Keep Current Style** to preserve the active RainCode++ colors and fonts. On a first install with RainLexer, the same choice imports the corresponding styles from RainLexer. If there is no current style, **Match Notepad++ mode** chooses a light or dark palette. You can also pick any named preset.
 5. Open Notepad++ and load a Rainmeter skin or include. If the tab opens as INI or uses the old lexer, choose **Language → Rainmeter 5**. Open **Plugins → RainCode++ → Settings sidebar** to access typing preferences, palettes, and Help.
 

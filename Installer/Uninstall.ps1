@@ -1,7 +1,11 @@
-param([Parameter(Mandatory)][string]$NppDirectory)
+param(
+    [Parameter(Mandatory)][string]$NppDirectory,
+    [switch]$ProgramFilesOnly
+)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClassicBackup.ps1')
 . (Join-Path $PSScriptRoot 'NotepadProcesses.ps1')
+. (Join-Path $PSScriptRoot 'InstallerPrivileges.ps1')
 
 function Return-RainCodeTabsToRainLexer([string]$Directory, [string]$Profile) {
     $legacy = @($Directory,$Profile) | Where-Object {
@@ -26,9 +30,7 @@ function Return-RainCodeTabsToRainLexer([string]$Directory, [string]$Profile) {
 }
 
 function Restart-Notepad([string]$Exe, [string]$Directory) {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    if (!(Test-Administrator)) {
         Start-Process -FilePath $Exe -ArgumentList '-multiInst' -WorkingDirectory $Directory
         return
     }
@@ -42,19 +44,9 @@ function Restart-Notepad([string]$Exe, [string]$Directory) {
     $desktop.Document.Application.ShellExecute($Exe, '-multiInst', $Directory, 'open', 1)
 }
 
-try {
-    $directory = (Resolve-Path -LiteralPath $NppDirectory).Path
-    $exe = Join-Path $directory 'notepad++.exe'
-    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Notepad++ was not found in the installation folder.' }
+function Remove-ProgramFiles([string]$Directory) {
     $plugin = Join-Path $directory 'plugins\RainCodePP'
-    $settingsApp = Join-Path $plugin 'RainCodePPSettings.exe'
-    if (-not (Wait-ForNotepadAppsToClose @(Get-NotepadApps $exe $settingsApp))) {
-        throw 'Notepad++ or RainCode++ Settings is still open. Save or close your work, then run the uninstaller again.'
-    }
-    $profile = Get-NotepadProfile $directory
-    Restore-MissingClassicRainLexer $directory $profile
-    try { Return-RainCodeTabsToRainLexer $directory $profile }
-    catch { Write-Output "Could not restore the RainLexer language on open tabs: $($_.Exception.Message)" }
+    Copy-ClassicFiles (Get-ApplicationBackup $directory) $directory
 
     foreach ($name in @('RainCodePP.dll','RainCodePPSettings.exe','README.md','HowToInstall.md','manual.md','LICENSE','LICENSE-GPL-2.0','LICENSE-Scintilla.txt')) {
         $file = Join-Path $plugin $name
@@ -86,6 +78,31 @@ try {
             [IO.Directory]::Delete($folder)
         }
     }
+}
+
+try {
+    if ($ProgramFilesOnly -and !(Test-Administrator)) { throw 'The program files step requires administrator rights.' }
+    $directory = (Resolve-Path -LiteralPath $NppDirectory).Path
+    $exe = Join-Path $directory 'notepad++.exe'
+    if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Notepad++ was not found in the installation folder.' }
+    $plugin = Join-Path $directory 'plugins\RainCodePP'
+    $settingsApp = Join-Path $plugin 'RainCodePPSettings.exe'
+    if (!(Wait-ForNotepadAppsToClose @(Get-NotepadApps $exe $settingsApp))) {
+        throw 'Notepad++ or RainCode++ Settings is still open. Save or close your work, then run the uninstaller again.'
+    }
+    if ($ProgramFilesOnly) {
+        Remove-ProgramFiles $directory
+        exit 0
+    }
+    $profile = Get-NotepadProfile $directory
+    if (Test-ApplicationWritable $directory) {
+        Remove-ProgramFiles $directory
+    } else {
+        Invoke-ElevatedInstaller (Join-Path $plugin 'Uninstall RainCode++.exe') '/S /ProgramFilesOnly'
+    }
+    if ($profile -ne $directory) { Copy-ClassicFiles (Get-ProfileBackup $profile) $profile }
+    try { Return-RainCodeTabsToRainLexer $directory $profile }
+    catch { Write-Output "Could not restore the RainLexer language on open tabs: $($_.Exception.Message)" }
     Write-Output 'Removed RainCode++. Saved preferences and the RainLexer backup were kept.'
     try { Restart-Notepad $exe $directory }
     catch { Write-Output "Could not reopen Notepad++ automatically: $($_.Exception.Message)" }

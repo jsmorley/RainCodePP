@@ -1,5 +1,5 @@
 Unicode true
-RequestExecutionLevel admin
+RequestExecutionLevel user
 SetCompressor /SOLID lzma
 !include "MUI2.nsh"
 !include "nsDialogs.nsh"
@@ -32,6 +32,7 @@ Page custom PalettePage SavePalette
 
 Var Palette
 Var PaletteControl
+Var ProgramFilesOnly
 
 !macro FindPowerShell
     ; A 32-bit PowerShell process cannot reliably inspect 64-bit Notepad++ processes.
@@ -68,6 +69,21 @@ FunctionEnd
 
 Function .onInit
     StrCpy $Palette "Keep"
+    ${GetParameters} $0
+    ${GetOptions} $0 "/ProgramFilesOnly" $1
+    ${IfNot} ${Errors}
+        StrCpy $ProgramFilesOnly "-ProgramFilesOnly"
+        ${GetOptions} $0 "/Palette=" $1
+        ${IfNot} ${Errors}
+            StrCpy $Palette $1
+        ${EndIf}
+        ${If} $INSTDIR == ""
+            SetErrorLevel 1
+            Abort
+        ${EndIf}
+        SetSilent silent
+        Return
+    ${EndIf}
     ${If} $INSTDIR != ""
         Return
     ${EndIf}
@@ -121,7 +137,7 @@ Function PalettePage
     !insertmacro AddPalettes
     ${NSD_CB_SetSelectionIndex} $PaletteControl 0
     ${NSD_CB_SelectStringExact} $PaletteControl $Palette
-    ${NSD_CreateLabel} 0 58u 100% 42u "$3 You can edit the palette later from the RainCode++ sidebar."
+    ${NSD_CreateLabel} 0 58u 100% 72u "$3$\r$\n$\r$\nLexer configuration: $1\plugins\Config"
     Pop $0
     nsDialogs::Show
 FunctionEnd
@@ -143,7 +159,7 @@ Function RunInstallScript
     ${EndIf}
 
     !insertmacro FindPowerShell
-    nsExec::ExecToStack '"$2" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\Install.ps1" -NppDirectory "$INSTDIR\." -Palette "$Palette" $3'
+    nsExec::ExecToStack '"$2" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\Install.ps1" -NppDirectory "$INSTDIR\." -Palette "$Palette" -SetupExecutable "$EXEPATH" $ProgramFilesOnly $3'
     Pop $0
     Pop $1
 
@@ -161,6 +177,7 @@ Section "RainCode++"
     File "Install.ps1"
     File "ClassicBackup.ps1"
     File "NotepadProcesses.ps1"
+    File "InstallerPrivileges.ps1"
     WriteUninstaller "$PLUGINSDIR\Uninstall RainCode++.exe"
     File "..\LICENSE"
     File "..\LICENSE-GPL-2.0"
@@ -180,6 +197,13 @@ Section "RainCode++"
     DetailPrint "Installing RainCode++ and applying your syntax palette..."
     Push ""
     Call RunInstallScript
+    ${If} $ProgramFilesOnly != ""
+        ${If} $0 != 0
+            SetErrorLevel 1
+            Abort
+        ${EndIf}
+        Goto install_done
+    ${EndIf}
     ${If} $0 == 2
         MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Notepad++ or RainCode++ Settings is open.$\r$\n$\r$\nClose them and continue setup? You can save any open work when prompted." /SD IDNO IDYES close_apps
         SetErrorLevel 2
@@ -208,10 +232,17 @@ close_apps:
         WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "NoModify" 1
         WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "NoRepair" 1
     ${EndIf}
+install_done:
 SectionEnd
 
 Function un.onInit
     GetFullPathName $INSTDIR "$INSTDIR\..\.."
+    ${GetParameters} $0
+    ${GetOptions} $0 "/ProgramFilesOnly" $1
+    ${IfNot} ${Errors}
+        StrCpy $ProgramFilesOnly "-ProgramFilesOnly"
+        SetSilent silent
+    ${EndIf}
 FunctionEnd
 
 Section "Uninstall"
@@ -220,8 +251,9 @@ Section "Uninstall"
     File "Uninstall.ps1"
     File "ClassicBackup.ps1"
     File "NotepadProcesses.ps1"
+    File "InstallerPrivileges.ps1"
     !insertmacro FindPowerShell
-    nsExec::ExecToStack '"$2" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\Uninstall.ps1" -NppDirectory "$INSTDIR\."'
+    nsExec::ExecToStack '"$2" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\Uninstall.ps1" -NppDirectory "$INSTDIR\." $ProgramFilesOnly'
     Pop $0
     Pop $1
     DetailPrint "$1"
@@ -230,10 +262,14 @@ Section "Uninstall"
         SetErrorLevel 1
         Abort
     ${EndIf}
+    ${If} $ProgramFilesOnly != ""
+        Goto uninstall_done
+    ${EndIf}
     SetRegView 64
     ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP" "InstallLocation"
     ${If} $0 == $INSTDIR
         DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP"
     ${EndIf}
+uninstall_done:
 SectionEnd
 

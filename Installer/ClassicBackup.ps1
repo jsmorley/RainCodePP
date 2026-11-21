@@ -1,8 +1,9 @@
 function Get-NotepadProfile([string]$Directory) {
-    if (Test-Path -LiteralPath (Join-Path $Directory 'doLocalConf.xml')) { return $Directory }
-    Join-Path $env:APPDATA 'Notepad++'
+    if (Test-Path -LiteralPath (Join-Path $Directory 'doLocalConf.xml') -PathType Leaf) { return $Directory }
+    $roaming = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)
+    if (!$roaming) { throw 'Could not locate roaming AppData for the current Windows user.' }
+    Join-Path $roaming 'Notepad++'
 }
-
 function Get-ApplicationBackup([string]$Directory) {
     Join-Path $Directory 'plugins\RainCodePP-backup\Original RainLexer'
 }
@@ -61,22 +62,6 @@ function Write-ClassicBackup([string]$Source, [string]$Backup) {
     if (Test-Path -LiteralPath $staging) {
         [IO.Directory]::Move($staging, $backup)
         Write-Output "Original RainLexer backed up to $backup"
-    }
-}
-
-function Backup-ClassicRainLexer([string]$Directory, [string]$Profile) {
-    # Back up program files beside Notepad++ so writable profile data cannot be
-    # restored into Program Files by an elevated uninstaller.
-    Write-ClassicBackup $Directory (Get-ApplicationBackup $Directory)
-    if ($Profile -ne $Directory) {
-        Write-ClassicBackup $Profile (Get-ProfileBackup $Profile)
-    }
-}
-
-function Restore-MissingClassicRainLexer([string]$Directory, [string]$Profile) {
-    Copy-ClassicFiles (Get-ApplicationBackup $Directory) $Directory
-    if ($Profile -ne $Directory) {
-        Copy-ClassicFiles (Get-ProfileBackup $Profile) $Profile
     }
 }
 
