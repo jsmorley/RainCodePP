@@ -1,3 +1,4 @@
+#define IDI_SETTINGS 1
 #define IDD_EDITOR 200
 #define IDD_COLOR_PICKER 201
 #define IDC_GROUP 2001

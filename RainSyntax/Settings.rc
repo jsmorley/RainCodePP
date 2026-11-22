@@ -1,7 +1,7 @@
 #include <windows.h>
 #include "SettingsResource.h"
 
-1 ICON "Rainmeter.ico"
+IDI_SETTINGS ICON "Rainmeter.ico"
 
 IDD_EDITOR DIALOGEX 0, 0, 592, 352
 STYLE DS_SETFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX

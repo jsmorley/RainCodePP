@@ -540,6 +540,7 @@ struct Editor {
     Path config, plugin, nppSettings;
     EditorFont editorFont;
     HWND window = nullptr;
+    HICON smallIcon = nullptr, largeIcon = nullptr;
     std::optional<POINT> windowPosition;
     Palette palette, activePalette;
     std::vector<std::string> words;
@@ -566,11 +567,27 @@ struct Editor {
         editorFont(std::move(font)), ownerId(owner) {}
     ~Editor()
     {
+        if (smallIcon) DestroyIcon(smallIcon);
+        if (largeIcon) DestroyIcon(largeIcon);
         for (HANDLE process : closing) CloseHandle(process);
         if (ownerProcess) CloseHandle(ownerProcess);
     }
     HWND Control(int id) const { return GetDlgItem(window, id); }
     void Status(const wchar_t* text) const { SetDlgItemTextW(window, IDC_STATUS, text); }
+
+    void SetWindowIcons()
+    {
+        const auto dpi = GetDpiForWindow(window);
+        const auto load = [&](UINT iconType, int width, int height) {
+            const auto icon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr),
+                MAKEINTRESOURCEW(IDI_SETTINGS), IMAGE_ICON, GetSystemMetricsForDpi(width, dpi),
+                GetSystemMetricsForDpi(height, dpi), LR_DEFAULTCOLOR));
+            if (icon) SendMessageW(window, WM_SETICON, iconType, reinterpret_cast<LPARAM>(icon));
+            return icon;
+        };
+        smallIcon = load(ICON_SMALL, SM_CXSMICON, SM_CYSMICON);
+        largeIcon = load(ICON_BIG, SM_CXICON, SM_CYICON);
+    }
 
     Path Preset(std::wstring_view name) const
     {
@@ -1441,8 +1458,7 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             editor->window = window;
             SetWindowLongPtrW(window, DWLP_USER, lParam);
             SetPropW(window, SettingsInstanceWindow, reinterpret_cast<HANDLE>(1));
-            if (HICON icon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1)))
-                SendMessageW(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
+            editor->SetWindowIcons();
             editor->Init();
             return TRUE;
         }
