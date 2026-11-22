@@ -651,7 +651,7 @@ struct Editor {
             {IDC_USE_PRESET, L"Copy the previewed preset into the palette you can edit or apply."},
             {IDC_FOREGROUND, L"Choose the text color for the selected syntax style."},
             {IDC_BACKGROUND, L"Choose the background color for the selected syntax style."},
-            {IDC_ALL_BACKGROUNDS, L"Set one background color for every Rainmeter syntax style and the editor area."},
+            {IDC_ALL_BACKGROUNDS, L"Set background color for this palette"},
             {IDC_FONT, L"Choose the font, size, and emphasis for the selected syntax style."},
             {IDC_APPLY, L"Save the palette and apply it to Rainmeter tabs in Notepad++."},
             {IDC_ACTIVE, L"Reload the palette currently in use by Notepad++."},

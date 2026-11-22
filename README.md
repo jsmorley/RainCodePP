@@ -1,6 +1,6 @@
 # RainSyntax for Notepad++
 
-RainSyntax is a native Windows lexer for Rainmeter 5 skin and include files. It is based on the Rainmeter Team's RainLexer and uses the Rainmeter 5 source and manual for its vocabulary.
+RainSyntax is a native Windows lexer for Rainmeter skin and include files. It is based on the Rainmeter Team's RainLexer and uses the Rainmeter source and manual for its vocabulary.
 
 ## Install or update
 
@@ -9,9 +9,9 @@ See [HowToInstall.md](HowToInstall.md) for the full setup, upgrade, RainLexer mi
 1. Save any work in Notepad++. Setup can close it normally if it is still open.
 2. Download the Windows installer from the [latest GitHub release](https://github.com/jsmorley/RainSyntax/releases/latest). Run it and choose the folder containing `notepad++.exe`.
 3. Choose **Keep Current Style** to import your RainLexer colors and fonts on a first installation or preserve your existing RainSyntax palette on an upgrade. If there is no current style, **Match Notepad++ mode** picks a light or dark default. You can also choose any included preset. Typing preferences and vocabulary changes survive updates.
-4. Open an INI or INC file. Use **Language → Rainmeter 5** if the tab is already assigned to INI or another language.
+4. Open an INI or INC file. If the tab is already assigned to INI or another language, select the Rainmeter entry installed by RainSyntax in the **Language** menu.
 
-The installer supports x64 and x86 copies of Notepad++ 8.4 or later on Windows 10 or 11. It puts the DLL and the settings application in `plugins\RainSyntax`. For portable Notepad++, with `doLocalConf.xml`, it installs `RainSyntax.xml` in the application's own `plugins\config`. For a standard installation, Setup uses `%APPDATA%\Notepad++\plugins\config` for the Windows user who launches it. If the older RainLexer is also installed, use **Language → Rainmeter 5** to distinguish the lexers.
+The installer supports x64 and x86 copies of Notepad++. Use a current release of Notepad++ on a supported Windows system. Setup puts the DLL and the settings application in `plugins\RainSyntax`. For portable Notepad++, with `doLocalConf.xml`, it installs `RainSyntax.xml` in the application's own `plugins\config`. For a standard installation, Setup uses `%APPDATA%\Notepad++\plugins\config` for the Windows user who launches it. If the older RainLexer is also installed, choose the newer Rainmeter entry in the **Language** menu to use RainSyntax.
 
 ## Return to RainLexer
 
@@ -33,13 +33,13 @@ The lexer works on source text. Rainmeter resolves references to included files,
 
 The sidebar opens **RainSyntax Settings**, a Windows application installed beside the plugin. Select a vocabulary category, edit one term per line, and save. Use **Option=Value** in the fixed-value categories. Use **Options with numbered variants** for options such as `IfCondition2`, entering the base name `IfCondition`. Changes apply after restarting Notepad++. The app stores the difference from the built-in vocabulary so unchanged terms can receive future updates.
 
-Choose a syntax category to preview its color and font. The color buttons open a color picker. **Set all backgrounds** gives the entire Rainmeter tab one background and clears individual background overrides. **Set font** sets the face, size, bold, italic, and underline. Browse seven light presets, including Ivory, and six dark presets. The preset picker shows a live syntax preview, including nested bangs, variables, and formulas. Choose **Use preset** to edit or apply the selection. You can export a palette XML or load a saved palette. Choose **Apply** to save the palette and update Rainmeter tabs. If the palette and Notepad++ use different light or dark modes, RainSyntax offers to switch modes and restart. Switching selects a manual mode and supersedes **Follow Windows**. The built-in **Style Configurator** handles global styles, other languages, and file extensions.
+Choose a syntax category to preview its color and font. The color buttons open a color picker. **Set palette background** gives the entire Rainmeter tab one background and clears individual background overrides. **Set font** sets the face, size, bold, italic, and underline. Browse seven light presets, including Ivory, and six dark presets. The preset picker shows a live syntax preview, including nested bangs, variables, and formulas. Choose **Use preset** to edit or apply the selection. You can export a palette XML or load a saved palette. Choose **Apply** to save the palette and update Rainmeter tabs. If the palette and Notepad++ use different light or dark modes, RainSyntax offers to switch modes and restart. Switching selects a manual mode and supersedes **Follow Windows**. The built-in **Style Configurator** handles global styles, other languages, and file extensions.
 
 ## Build from source
 
-Run `Build\Build.ps1` from PowerShell with Visual Studio C++ v145, a Windows SDK, and NSIS installed. Use `-Target Test` for the lexer tests or `-Target Binaries` for both DLLs and settings executables. `-Target All` runs the tests and produces the installer in `out`. Python is used only to regenerate the shipped vocabulary and theme XML.
+Run `Build\Build.ps1` from PowerShell with the Visual Studio C++ toolset selected by the solution, a Windows SDK, and NSIS installed. Use `-Target Test` for the lexer tests or `-Target Binaries` for both DLLs and settings executables. `-Target All` runs the tests and produces the installer in `out`. Python is used only to regenerate the shipped vocabulary and theme XML.
 
 The upstream RainLexer word lists are in `Config\Languages.xml`. To update the compiled vocabulary, run `python Build\UpdateVocabulary.py <Rainmeter-source> --manual <manual-source>`. The checked-in vocabulary was generated against Rainmeter source commit `96ec0b34`.
 
-Based on [RainLexer](https://github.com/rainmeter/rainlexer) by the Rainmeter Team. The source headers identify their applicable terms. See [GNU GPL v2](LICENSE-GPL-2.0), [GNU GPL v3](LICENSE), and the [Scintilla and Lexilla license](ThirdParty/LICENSE-Scintilla.txt). The vendored Notepad++ headers retain their own notices.
+Based on [RainLexer](https://github.com/rainmeter/rainlexer) by the Rainmeter Team. The source headers identify the applicable GNU GPL terms. See the repository's GNU GPL license files and the [Scintilla and Lexilla license](ThirdParty/LICENSE-Scintilla.txt). The vendored Notepad++ headers retain their own notices.
 

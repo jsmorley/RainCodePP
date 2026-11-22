@@ -1,6 +1,6 @@
 # RainSyntax manual
 
-RainSyntax highlights Rainmeter 5 skin and include files in Notepad++. It works on `.ini` and `.inc` files. For a tab that already has another language assigned, choose **Language → Rainmeter 5**.
+RainSyntax highlights Rainmeter skin and include files in Notepad++. It works on `.ini` and `.inc` files. For a tab that already has another language assigned, select the Rainmeter entry installed by RainSyntax in the **Language** menu.
 
 ## 1. Open the sidebar
 
@@ -10,7 +10,7 @@ Choose **Plugins → RainSyntax → Settings sidebar**. Drag the panel by its ti
 
 - **Automatic completion** offers choices as you type. Try `Font` for `FontColor`, `FontFace`, `FontSize`, and `FontWeight`. Narrow the list by typing more. Use the arrow keys and Tab to choose, or Esc to keep your text.
 - **Ctrl+Alt+Space** opens completion on demand, even if automatic completion is off.
-- **Correct capitalization** uses the Rainmeter 5 spelling. After the first correction of an occurrence, you can override it while the document stays open.
+- **Correct capitalization** uses the standard Rainmeter spelling. After the first correction of an occurrence, you can override it while the document stays open.
 - **Correct obvious typos** corrects a completed option, bang, or fixed value when one supported spelling differs by a single edit. Use Undo to reverse an edit.
 
 All three typing aids start enabled. Use the sidebar to turn them off individually. Updating RainSyntax preserves your choices.
@@ -49,8 +49,8 @@ To remove a preset from your dropdown, hold **Shift** while it is highlighted an
 RainSyntax Settings remembers where you last closed it. If that position is outside the available desktop, Settings opens within the nearest monitor's work area.
 
 - **Use preset** copies the preview into your editable palette.
-- In **Set style for syntax types**, hover over a choice for a brief description. Select a type to change its foreground, background, font, size, bold, italic, or underline. Changing the **Default** background updates the blank area of the Rainmeter tab and every style that inherits it. Selecting an individual style and choosing a background creates an override. Use **Set all backgrounds** to clear all overrides and set one background for the entire tab.
-- Click **Foreground**, **Background**, or **Set all backgrounds** to enter a hex color such as `#4681AD` or edit the decimal **Red**, **Green**, and **Blue** values from 0 to 255. You can copy either format. The swatch previews the color before you click **OK**. **Browse colors** opens the visual picker.
+- In **Set style for syntax types**, hover over a choice for a brief description. Select a type to change its foreground, background, font, size, bold, italic, or underline. Changing the **Default** background updates the blank area of the Rainmeter tab and every style that inherits it. Selecting an individual style and choosing a background creates an override. Use **Set palette background** to clear all overrides and set one background for the entire tab.
+- Click **Foreground**, **Background**, or **Set palette background** to enter a hex color such as `#4681AD` or edit the decimal **Red**, **Green**, and **Blue** values from 0 to 255. You can copy either format. The swatch previews the color before you click **OK**. **Browse colors** opens the visual picker.
 - **Save palette as** exports your palette to XML. **Load palette** opens a saved palette for editing.
 - **Apply** saves the palette and updates Rainmeter tabs immediately. **Apply \*** indicates that the palette has unapplied changes. If the palette and Notepad++ use different light or dark modes, choose **Yes** to switch to the matching mode and restart, **No** to apply the palette with the current mode, or **Cancel** to keep editing. Switching selects a manual mode instead of Follow Windows. Save any open files if Notepad++ prompts you before reopening your tabs.
 
