@@ -68,24 +68,53 @@ struct ColorPicker {
     std::optional<COLORREF> preview;
     HWND window = nullptr;
     HWND visualPicker = nullptr;
+    bool updating = false;
 
-    void SetHex(COLORREF value) const
+    void SyncColor(std::optional<COLORREF> value, int editedField = 0)
     {
-        const auto code = L"#" + ColorCode(value);
-        SetDlgItemTextW(window, IDC_HEX_COLOR, code.c_str());
-        SendDlgItemMessageW(window, IDC_HEX_COLOR, EM_SETSEL, 0, -1);
+        preview = value;
+        updating = true;
+        if (editedField != IDC_HEX_COLOR)
+        {
+            const auto hex = value ? L"#" + ColorCode(*value) : std::wstring{};
+            SetDlgItemTextW(window, IDC_HEX_COLOR, hex.c_str());
+        }
+        if (!editedField || editedField == IDC_HEX_COLOR)
+        {
+            SetDlgItemTextW(window, IDC_RED_COLOR, value ? std::to_wstring(GetRValue(*value)).c_str() : L"");
+            SetDlgItemTextW(window, IDC_GREEN_COLOR, value ? std::to_wstring(GetGValue(*value)).c_str() : L"");
+            SetDlgItemTextW(window, IDC_BLUE_COLOR, value ? std::to_wstring(GetBValue(*value)).c_str() : L"");
+        }
+        updating = false;
+        EnableWindow(GetDlgItem(window, IDOK), preview.has_value());
+        InvalidateRect(GetDlgItem(window, IDC_COLOR_SWATCH), nullptr, FALSE);
     }
 
-    void UpdatePreview()
+    std::optional<COLORREF> ReadHex() const
     {
         const auto input = WindowText(GetDlgItem(window, IDC_HEX_COLOR));
         std::wstring_view hex = input;
         while (!hex.empty() && iswspace(hex.front())) hex.remove_prefix(1);
         while (!hex.empty() && iswspace(hex.back())) hex.remove_suffix(1);
         if (hex.starts_with(L"#")) hex.remove_prefix(1);
-        preview = ParseHexColor(hex);
-        EnableWindow(GetDlgItem(window, IDOK), preview.has_value());
-        InvalidateRect(GetDlgItem(window, IDC_COLOR_SWATCH), nullptr, FALSE);
+        return ParseHexColor(hex);
+    }
+
+    std::optional<COLORREF> ReadRgb() const
+    {
+        const auto readChannel = [&](int field) -> std::optional<int> {
+            const auto text = WindowText(GetDlgItem(window, field));
+            if (text.empty() || text.size() > 3 || text.find_first_not_of(L"0123456789") != std::wstring::npos)
+                return std::nullopt;
+            const auto number = _wtoi(text.c_str());
+            if (number > 255) return std::nullopt;
+            return number;
+        };
+        const auto red = readChannel(IDC_RED_COLOR);
+        const auto green = readChannel(IDC_GREEN_COLOR);
+        const auto blue = readChannel(IDC_BLUE_COLOR);
+        if (!red || !green || !blue) return std::nullopt;
+        return RGB(*red, *green, *blue);
     }
 
     void Browse()
@@ -97,7 +126,7 @@ struct ColorPicker {
         choose.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
         choose.lCustData = reinterpret_cast<LPARAM>(this);
         choose.lpfnHook = VisualPickerHook;
-        if (ChooseColorW(&choose)) SetHex(choose.rgbResult);
+        if (ChooseColorW(&choose)) SyncColor(choose.rgbResult);
         visualPicker = nullptr;
     }
 
@@ -126,8 +155,10 @@ struct ColorPicker {
             SetWindowLongPtrW(window, DWLP_USER, lParam);
             SetWindowTextW(window, picker.title);
             SendDlgItemMessageW(window, IDC_HEX_COLOR, EM_SETLIMITTEXT, 64, 0);
-            picker.SetHex(picker.color);
-            picker.UpdatePreview();
+            for (const int field : {IDC_RED_COLOR, IDC_GREEN_COLOR, IDC_BLUE_COLOR})
+                SendDlgItemMessageW(window, field, EM_SETLIMITTEXT, 3, 0);
+            picker.SyncColor(picker.color);
+            SendDlgItemMessageW(window, IDC_HEX_COLOR, EM_SETSEL, 0, -1);
             return TRUE;
         }
         auto* picker = reinterpret_cast<ColorPicker*>(GetWindowLongPtrW(window, DWLP_USER));
@@ -144,7 +175,14 @@ struct ColorPicker {
         switch (LOWORD(wParam))
         {
         case IDC_HEX_COLOR:
-            if (HIWORD(wParam) == EN_CHANGE) picker->UpdatePreview();
+        case IDC_RED_COLOR:
+        case IDC_GREEN_COLOR:
+        case IDC_BLUE_COLOR:
+            if (HIWORD(wParam) == EN_CHANGE && !picker->updating)
+            {
+                const auto field = LOWORD(wParam);
+                picker->SyncColor(field == IDC_HEX_COLOR ? picker->ReadHex() : picker->ReadRgb(), field);
+            }
             return TRUE;
         case IDC_VISUAL_COLOR:
             picker->Browse();
