@@ -62,6 +62,13 @@ std::wstring ColorCode(COLORREF color)
     return text;
 }
 
+void SetForeground(StyleSettings& style, COLORREF foreground)
+{
+    style.foreground = foreground;
+    const auto flags = ColorFlags(style);
+    if (!(flags & 1)) style.colorStyle = std::to_wstring(flags | 1);
+}
+
 struct ColorPicker {
     const wchar_t* title;
     COLORREF color;
@@ -651,6 +658,7 @@ struct Editor {
             {IDC_USE_PRESET, L"Copy the previewed preset into the palette you can edit or apply."},
             {IDC_FOREGROUND, L"Choose the text color for the selected syntax style."},
             {IDC_BACKGROUND, L"Choose the background color for the selected syntax style."},
+            {IDC_ALL_FOREGROUNDS, L"Set foreground color for this palette"},
             {IDC_ALL_BACKGROUNDS, L"Set background color for this palette"},
             {IDC_FONT, L"Choose the font, size, and emphasis for the selected syntax style."},
             {IDC_APPLY, L"Save the palette and apply it to Rainmeter tabs in Notepad++."},
@@ -788,7 +796,7 @@ struct Editor {
     {
         const bool editingPalette = !presetPreview && !pendingPalette;
         for (const int id : {IDC_FOREGROUND, IDC_BACKGROUND, IDC_FONT,
-                IDC_EXPORT, IDC_ALL_BACKGROUNDS})
+                IDC_EXPORT, IDC_ALL_FOREGROUNDS, IDC_ALL_BACKGROUNDS})
             EnableWindow(Control(id), editingPalette);
         EnableWindow(Control(IDC_USE_PRESET), presetPreview.has_value() && !pendingPalette);
         EnableWindow(Control(IDC_APPLY), !presetPreview);
@@ -972,12 +980,13 @@ struct Editor {
         RestoreDC(draw.hDC, saved);
     }
 
-    void PickColor(bool foreground, bool allBackgrounds = false)
+    void PickColor(bool foreground, bool entirePalette = false)
     {
-        const auto index = allBackgrounds ? static_cast<size_t>(Default) : style;
+        const auto index = entirePalette ? static_cast<size_t>(Default) : style;
         auto& item = palette[index];
-        const auto title = allBackgrounds ? L"Background color for this entire palette" :
-            foreground ? L"Foreground color" : L"Background color";
+        const auto title = foreground
+            ? (entirePalette ? L"Foreground color for this entire palette" : L"Foreground color")
+            : (entirePalette ? L"Background color for this entire palette" : L"Background color");
         ColorPicker picker{title, foreground ? item.foreground : item.background, customColors};
         activeColorPicker = &picker;
         const auto result = DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_COLOR_PICKER),
@@ -987,11 +996,13 @@ struct Editor {
         {
             if (foreground)
             {
-                item.foreground = picker.color;
-                const auto flags = ColorFlags(item);
-                if (!(flags & 1)) item.colorStyle = std::to_wstring(flags | 1);
+                if (entirePalette)
+                {
+                    for (auto& entry : palette) SetForeground(entry, picker.color);
+                }
+                else SetForeground(item, picker.color);
             }
-            else SetBackground(palette, index, picker.color, allBackgrounds);
+            else SetBackground(palette, index, picker.color, entirePalette);
             ShowCurrent();
         }
     }
@@ -1011,11 +1022,7 @@ struct Editor {
         item.family = font.lfFaceName;
         item.size = std::to_wstring(choose.iPointSize / 10);
         item.emphasis = (font.lfWeight >= FW_BOLD ? 1 : 0) | (font.lfItalic ? 2 : 0) | (font.lfUnderline ? 4 : 0);
-        if (choose.rgbColors != item.foreground)
-        {
-            item.foreground = choose.rgbColors;
-            item.colorStyle = std::to_wstring(ColorFlags(item) | 1);
-        }
+        if (choose.rgbColors != item.foreground) SetForeground(item, choose.rgbColors);
         ShowCurrent();
     }
 
@@ -1328,6 +1335,7 @@ struct Editor {
             break;
         case IDC_FOREGROUND: PickColor(true); break;
         case IDC_BACKGROUND: PickColor(false); break;
+        case IDC_ALL_FOREGROUNDS: PickColor(true, true); break;
         case IDC_ALL_BACKGROUNDS: PickColor(false, true); break;
         case IDC_FONT: PickFont(); break;
         case IDC_ACTIVE: Load(ActivePalette(), true); break;

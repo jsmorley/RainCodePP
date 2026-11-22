@@ -10,11 +10,11 @@ SetCompressor /SOLID lzma
 !define PBS_MARQUEE 0x08
 
 Name "RainSyntax for Notepad++"
-OutFile "..\out\RainSyntax-1.0.25-Setup.exe"
-VIProductVersion "1.0.25.0"
+OutFile "..\out\RainSyntax-1.0.26-Setup.exe"
+VIProductVersion "1.0.26.0"
 VIAddVersionKey "ProductName" "RainSyntax"
 VIAddVersionKey "FileDescription" "RainSyntax Setup for Notepad++"
-VIAddVersionKey "FileVersion" "1.0.25"
+VIAddVersionKey "FileVersion" "1.0.26"
 VIAddVersionKey "LegalCopyright" "Copyright 2026 Jeffrey Morley. Based on RainLexer by the Rainmeter Team."
 !define MUI_DIRECTORYPAGE_TEXT_TOP "Choose the folder containing notepad++.exe. Setup installs or updates RainSyntax in that copy of Notepad++."
 !define MUI_FINISHPAGE_TEXT "RainSyntax is ready. Open Notepad++ and use Language > Rainmeter 5 or Plugins > RainSyntax > Settings sidebar."
@@ -117,9 +117,9 @@ Function PalettePage
     ${If} $0 == error
         Abort
     ${EndIf}
-    ${NSD_CreateLabel} 0 6u 100% 22u "Choose how RainSyntax should color Rainmeter files."
+    ${NSD_CreateLabel} 0 5u 100% 12u "Choose a starting palette."
     Pop $0
-    ${NSD_CreateDropList} 0 32u 100% 130u ""
+    ${NSD_CreateListBox} 0 20u 100% 84u ""
     Pop $PaletteControl
     StrCpy $1 "$APPDATA\Notepad++"
     ${If} ${FileExists} "$INSTDIR\doLocalConf.xml"
@@ -131,22 +131,25 @@ Function PalettePage
     ${OrIf} ${FileExists} "$1\plugins\config\RainCodePP-palette.xml"
     ${OrIf} ${FileExists} "$INSTDIR\plugins\config\RainCodePP.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainLexer.xml"
-        ${NSD_CB_AddString} $PaletteControl "Keep Current Style"
+        ${NSD_LB_AddString} $PaletteControl "Keep Current Style"
         StrCpy $3 "Keep Current Style preserves your RainSyntax palette or imports your RainLexer styles on a first install."
     ${Else}
-        ${NSD_CB_AddString} $PaletteControl "Match Notepad++ mode"
+        ${NSD_LB_AddString} $PaletteControl "Match Notepad++ mode"
         StrCpy $3 "Match Notepad++ mode picks a light or dark default based on your Notepad++ setting."
     ${EndIf}
     !insertmacro AddPalettes
-    ${NSD_CB_SetSelectionIndex} $PaletteControl 0
-    ${NSD_CB_SelectStringExact} $PaletteControl $Palette
-    ${NSD_CreateLabel} 0 58u 100% 72u "$3$\r$\n$\r$\nLexer configuration: $1\plugins\Config"
+    SendMessage $PaletteControl ${LB_FINDSTRINGEXACT} -1 "STR:$Palette" $2
+    ${If} $2 == -1
+        StrCpy $2 0
+    ${EndIf}
+    ${NSD_LB_SetSelectionIndex} $PaletteControl $2
+    ${NSD_CreateLabel} 0 110u 100% 29u "$3$\r$\nLexer configuration: $1\plugins\Config"
     Pop $0
     nsDialogs::Show
 FunctionEnd
 
 Function SavePalette
-    ${NSD_GetText} $PaletteControl $Palette
+    ${NSD_LB_GetSelection} $PaletteControl $Palette
 FunctionEnd
 
 Function RunInstallScript
@@ -230,7 +233,7 @@ close_apps:
     ${IfNot} ${FileExists} "$INSTDIR\doLocalConf.xml"
         SetRegView 64
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayName" "RainSyntax for Notepad++"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.25"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.26"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "InstallLocation" "$INSTDIR"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "UninstallString" '"$INSTDIR\plugins\RainSyntax\Uninstall RainSyntax.exe"'
         WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "NoModify" 1
