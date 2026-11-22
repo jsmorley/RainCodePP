@@ -79,6 +79,40 @@ LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARA
     UINT_PTR id, DWORD_PTR)
 {
     if (message == WM_NCDESTROY) RemoveWindowSubclass(window, PreviewEditProc, id);
+    if (message == WM_CONTEXTMENU)
+    {
+        POINT position{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (lParam == -1)
+        {
+            position = {};
+            GetCaretPos(&position);
+            ClientToScreen(window, &position);
+        }
+        if (const auto menu = CreatePopupMenu())
+        {
+            constexpr UINT SelectAll = 1;
+            CHARRANGE selection{};
+            SendMessageW(window, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
+            const auto selectionState = selection.cpMin != selection.cpMax ? MF_ENABLED : MF_GRAYED;
+            const auto pasteState = SendMessageW(window, EM_CANPASTE, CF_UNICODETEXT, 0) ? MF_ENABLED : MF_GRAYED;
+            AppendMenuW(menu, MF_STRING | selectionState, WM_CUT, L"Cu&t");
+            AppendMenuW(menu, MF_STRING | selectionState, WM_COPY, L"&Copy");
+            AppendMenuW(menu, MF_STRING | pasteState, WM_PASTE, L"&Paste");
+            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+            const auto textState = GetWindowTextLengthW(window) ? MF_ENABLED : MF_GRAYED;
+            AppendMenuW(menu, MF_STRING | textState, SelectAll, L"Select &All");
+            const auto command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+                position.x, position.y, 0, window, nullptr);
+            DestroyMenu(menu);
+            if (command)
+            {
+                SetFocus(window);
+                if (command == SelectAll) SendMessageW(window, EM_SETSEL, 0, -1);
+                else SendMessageW(window, command, 0, 0);
+            }
+            return 0;
+        }
+    }
     if (message == WM_PASTE || (message == WM_KEYDOWN &&
         ((wParam == 'V' && GetKeyState(VK_CONTROL) < 0) || (wParam == VK_INSERT && GetKeyState(VK_SHIFT) < 0))))
     {
