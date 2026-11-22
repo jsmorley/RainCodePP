@@ -976,7 +976,7 @@ struct Editor {
     {
         const auto index = allBackgrounds ? static_cast<size_t>(Default) : style;
         auto& item = palette[index];
-        const auto title = allBackgrounds ? L"Background for all styles" :
+        const auto title = allBackgrounds ? L"Background color for this entire palette" :
             foreground ? L"Foreground color" : L"Background color";
         ColorPicker picker{title, foreground ? item.foreground : item.background, customColors};
         activeColorPicker = &picker;
