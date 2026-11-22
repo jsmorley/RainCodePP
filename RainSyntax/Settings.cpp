@@ -4,6 +4,7 @@
 #include <windowsx.h>
 #include <commdlg.h>
 #include <commctrl.h>
+#include <dlgs.h>
 #include <shellapi.h>
 #include <shlobj.h>
 
@@ -67,6 +68,18 @@ void SetForeground(StyleSettings& style, COLORREF foreground)
     style.foreground = foreground;
     const auto flags = ColorFlags(style);
     if (!(flags & 1)) style.colorStyle = std::to_wstring(flags | 1);
+}
+
+UINT_PTR CALLBACK PaletteFontDialog(HWND dialog, UINT message, WPARAM, LPARAM)
+{
+    if (message == WM_INITDIALOG)
+    {
+        SetWindowTextW(dialog, L"Font for this entire palette");
+        // Color has a separate palette control, and syntax styles have no strikeout flag.
+        for (const int id : {cmb4, stc4, chx1})
+            ShowWindow(GetDlgItem(dialog, id), SW_HIDE);
+    }
+    return 0;
 }
 
 struct ColorPicker {
@@ -661,6 +674,7 @@ struct Editor {
             {IDC_ALL_FOREGROUNDS, L"Set foreground color for this palette"},
             {IDC_ALL_BACKGROUNDS, L"Set background color for this palette"},
             {IDC_FONT, L"Choose the font, size, and emphasis for the selected syntax style."},
+            {IDC_PALETTE_FONT, L"Set the font, size, and emphasis for this palette"},
             {IDC_APPLY, L"Save the palette and apply it to Rainmeter tabs in Notepad++."},
             {IDC_ACTIVE, L"Reload the palette currently in use by Notepad++."},
             {IDC_IMPORT, L"Load a RainSyntax palette XML file for editing."},
@@ -796,7 +810,7 @@ struct Editor {
     {
         const bool editingPalette = !presetPreview && !pendingPalette;
         for (const int id : {IDC_FOREGROUND, IDC_BACKGROUND, IDC_FONT,
-                IDC_EXPORT, IDC_ALL_FOREGROUNDS, IDC_ALL_BACKGROUNDS})
+                IDC_EXPORT, IDC_ALL_FOREGROUNDS, IDC_ALL_BACKGROUNDS, IDC_PALETTE_FONT})
             EnableWindow(Control(id), editingPalette);
         EnableWindow(Control(IDC_USE_PRESET), presetPreview.has_value() && !pendingPalette);
         EnableWindow(Control(IDC_APPLY), !presetPreview);
@@ -1007,22 +1021,41 @@ struct Editor {
         }
     }
 
-    void PickFont()
+    void PickFont(bool entirePalette = false)
     {
-        auto font = editorFont.Resolve(palette[style], GetDpiForWindow(window), false);
+        const auto index = entirePalette ? static_cast<size_t>(Default) : style;
+        auto& item = palette[index];
+        auto font = editorFont.Resolve(item, GetDpiForWindow(window), false);
         CHOOSEFONTW choose{sizeof(choose)};
         choose.hwndOwner = window;
         choose.lpLogFont = &font;
         choose.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT | CF_LIMITSIZE | CF_EFFECTS;
         choose.nSizeMin = 5;
         choose.nSizeMax = 72;
-        choose.rgbColors = palette[style].foreground;
+        choose.rgbColors = item.foreground;
+        if (entirePalette)
+        {
+            choose.Flags |= CF_ENABLEHOOK;
+            choose.lpfnHook = PaletteFontDialog;
+        }
         if (!ChooseFontW(&choose)) return;
-        auto& item = palette[style];
-        item.family = font.lfFaceName;
-        item.size = std::to_wstring(choose.iPointSize / 10);
-        item.emphasis = (font.lfWeight >= FW_BOLD ? 1 : 0) | (font.lfItalic ? 2 : 0) | (font.lfUnderline ? 4 : 0);
-        if (choose.rgbColors != item.foreground) SetForeground(item, choose.rgbColors);
+        const auto size = std::to_wstring(choose.iPointSize / 10);
+        const unsigned emphasis = (font.lfWeight >= FW_BOLD ? 1 : 0) |
+            (font.lfItalic ? 2 : 0) | (font.lfUnderline ? 4 : 0);
+        const auto applyFont = [&](StyleSettings& target) {
+            target.family = font.lfFaceName;
+            target.size = size;
+            target.emphasis = emphasis;
+        };
+        if (entirePalette)
+        {
+            for (auto& entry : palette) applyFont(entry);
+        }
+        else
+        {
+            applyFont(item);
+            if (choose.rgbColors != item.foreground) SetForeground(item, choose.rgbColors);
+        }
         ShowCurrent();
     }
 
@@ -1338,6 +1371,7 @@ struct Editor {
         case IDC_ALL_FOREGROUNDS: PickColor(true, true); break;
         case IDC_ALL_BACKGROUNDS: PickColor(false, true); break;
         case IDC_FONT: PickFont(); break;
+        case IDC_PALETTE_FONT: PickFont(true); break;
         case IDC_ACTIVE: Load(ActivePalette(), true); break;
         case IDC_IMPORT:
             if (const auto path = Browse(false); !path.empty()) Load(path, false);

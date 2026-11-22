@@ -10,11 +10,11 @@ SetCompressor /SOLID lzma
 !define PBS_MARQUEE 0x08
 
 Name "RainSyntax for Notepad++"
-OutFile "..\out\RainSyntax-1.0.26-Setup.exe"
-VIProductVersion "1.0.26.0"
+OutFile "..\out\RainSyntax-1.0.28-Setup.exe"
+VIProductVersion "1.0.28.0"
 VIAddVersionKey "ProductName" "RainSyntax"
 VIAddVersionKey "FileDescription" "RainSyntax Setup for Notepad++"
-VIAddVersionKey "FileVersion" "1.0.26"
+VIAddVersionKey "FileVersion" "1.0.28"
 VIAddVersionKey "LegalCopyright" "Copyright 2026 Jeffrey Morley. Based on RainLexer by the Rainmeter Team."
 !define MUI_DIRECTORYPAGE_TEXT_TOP "Choose the folder containing notepad++.exe. Setup installs or updates RainSyntax in that copy of Notepad++."
 !define MUI_FINISHPAGE_TEXT "RainSyntax is ready. Open Notepad++ and use Language > Rainmeter 5 or Plugins > RainSyntax > Settings sidebar."
@@ -130,6 +130,7 @@ Function PalettePage
     ${OrIf} ${FileExists} "$1\plugins\config\RainCodePP.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainCodePP-palette.xml"
     ${OrIf} ${FileExists} "$INSTDIR\plugins\config\RainCodePP.xml"
+    ${OrIf} ${FileExists} "$INSTDIR\plugins\config\RainLexer.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainLexer.xml"
         ${NSD_LB_AddString} $PaletteControl "Keep Current Style"
         StrCpy $3 "Keep Current Style preserves your RainSyntax palette or imports your RainLexer styles on a first install."
@@ -233,7 +234,7 @@ close_apps:
     ${IfNot} ${FileExists} "$INSTDIR\doLocalConf.xml"
         SetRegView 64
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayName" "RainSyntax for Notepad++"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.26"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.28"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "InstallLocation" "$INSTDIR"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "UninstallString" '"$INSTDIR\plugins\RainSyntax\Uninstall RainSyntax.exe"'
         WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "NoModify" 1

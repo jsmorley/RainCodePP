@@ -29,6 +29,7 @@ BEGIN
     PUSHBUTTON "Set font", IDC_FONT, 473, 239, 103, 17
     PUSHBUTTON "Set palette foreground", IDC_ALL_FOREGROUNDS, 257, 260, 103, 17
     PUSHBUTTON "Set palette background", IDC_ALL_BACKGROUNDS, 365, 260, 103, 17
+    PUSHBUTTON "Set palette font", IDC_PALETTE_FONT, 473, 260, 103, 17
     PUSHBUTTON "Reload active", IDC_ACTIVE, 257, 283, 97, 16
     PUSHBUTTON "Load palette", IDC_IMPORT, 365, 283, 100, 16
     PUSHBUTTON "Save palette as...", IDC_EXPORT, 473, 283, 102, 16

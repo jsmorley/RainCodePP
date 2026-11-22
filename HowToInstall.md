@@ -20,7 +20,7 @@ Both plugins can stay installed. Choose **Language → Rainmeter** to use the or
 
 On the first install, Setup backs up the original RainLexer plugin and its style, vocabulary, and preference files when present. Use **Open RainLexer backup** in the RainSyntax sidebar or settings app to find the backup. The program backup lives in `plugins\RainSyntax-backup\Original RainLexer` under Notepad++. A standard installation also keeps backed-up profile files under `%APPDATA%\Notepad++\plugins\config\RainSyntax-backup\Original RainLexer`. For a portable installation, the backup stays with the portable copy.
 
-**Keep Current Style** starts RainSyntax with your existing RainLexer colors and fonts when the original palette is available. RainSyntax gives its additional syntax types their own styles. RainLexer keeps its original vocabulary. To customize the new lexer’s vocabulary, choose **Edit vocabulary and palettes** in the RainSyntax sidebar.
+**Keep Current Style** copies the foreground, background, and font settings for matching syntax styles from the RainLexer file Notepad++ loads. Setup looks in the application’s plugin configuration folder first, then in the user profile. RainSyntax gives its additional syntax types their own styles. RainLexer keeps its original vocabulary. To customize the new lexer’s vocabulary, choose **Edit vocabulary and palettes** in the RainSyntax sidebar.
 
 ## Uninstall and return to RainLexer
 

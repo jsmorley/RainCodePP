@@ -41,7 +41,6 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot, [string]$Directory) {
     $config = Join-Path $configRoot 'plugins\config'
     $installedXml = Join-Path $config 'RainSyntax.xml'
     $savedPalette = Join-Path $config 'RainSyntax-palette.xml'
-    $classicXml = Join-Path $config 'RainLexer.xml'
     $oldStyles = $null
     $selected = $Palette
     $previousPath = if (Test-Path -LiteralPath $installedXml -PathType Leaf) { $installedXml }
@@ -56,8 +55,13 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot, [string]$Directory) {
         $source = if ($hasSavedPalette) { Read-StyleXml $previousPalette } else { $previous }
         $oldStyles = $source.SelectSingleNode("/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']")
     } elseif ($Palette -eq 'Keep Current Style') {
+        # Match the external lexer loader's application-first lookup order.
+        $classicXml = Join-Path $Directory 'plugins\Config\RainLexer.xml'
+        if (!(Test-Path -LiteralPath $classicXml -PathType Leaf)) {
+            $classicXml = Join-Path $config 'RainLexer.xml'
+        }
         if (-not (Test-Path -LiteralPath $classicXml -PathType Leaf)) {
-            throw 'RainLexer.xml could not be found in the selected Notepad++ profile.'
+            throw 'RainLexer.xml could not be found in the selected Notepad++ installation or profile.'
         }
         $legacy = Read-StyleXml $classicXml
         $oldStyles = $legacy.SelectSingleNode("/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter']")
