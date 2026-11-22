@@ -7,6 +7,7 @@
 #include "menuCmdID.h"
 #include "resource.h"
 #include "Syntax.h"
+#include "ButtonTooltips.h"
 #include "SettingsFiles.h"
 #include "Palette.h"
 #include "RestartSession.h"
@@ -382,6 +383,20 @@ INT_PTR CALLBACK PanelDialog(HWND window, UINT message, WPARAM wParam, LPARAM lP
     case WM_INITDIALOG:
     {
         SyncPanel(window);
+        AddButtonTooltips(window, {
+            {IDC_COMPLETION, L"Show vocabulary suggestions automatically as you type Rainmeter code."},
+            {IDC_CORRECTION, L"Use the standard capitalization for recognized Rainmeter terms."},
+            {IDC_TYPOS, L"Correct a completed term when it has one clear spelling match."},
+            {IDC_EDIT_SETTINGS, L"Open the window for editing vocabulary and syntax palettes."},
+            {IDC_REFRESH_SKIN, L"Refresh the running Rainmeter skin for the active file."},
+            {IDC_REFRESH_ALL, L"Refresh all running Rainmeter skins."},
+            {IDC_RESTART_RAINMETER, L"Close and restart Rainmeter."},
+            {IDC_BACKUP, L"Open the folder containing any original RainLexer files saved by setup."},
+            {IDC_UNINSTALL, L"Start the RainSyntax uninstaller."},
+            {IDC_SHOW_MANUAL, L"Open the RainSyntax manual in a Notepad++ panel."},
+            {IDC_ABOUT, L"Show the RainSyntax version and credits."},
+            {IDC_STYLE, L"Open Notepad++ settings for global styles and file extensions."},
+        });
         const HWND link = GetDlgItem(window, IDC_STYLE);
         RECT bounds{};
         if (GetWindowRect(link, &bounds))

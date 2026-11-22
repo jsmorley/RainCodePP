@@ -50,6 +50,7 @@
     <ClCompile Include="Settings.cpp" />
     <ClCompile Include="Syntax.cpp" />
     <ResourceCompile Include="Settings.rc" />
+    <ClInclude Include="ButtonTooltips.h" />
     <ClInclude Include="SettingsFiles.h" />
     <ClInclude Include="SettingsResource.h" />
     <ClInclude Include="Syntax.h" />

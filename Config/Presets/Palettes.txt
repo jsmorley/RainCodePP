@@ -11,4 +11,3 @@ Dark|Cinder and Copper
 Dark|Deep Current
 Dark|Violet Hour
 Dark|Forest After Rain
-Example|JSMorley

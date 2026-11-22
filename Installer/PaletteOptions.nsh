@@ -13,5 +13,4 @@
     ${NSD_CB_AddString} $PaletteControl "Deep Current"
     ${NSD_CB_AddString} $PaletteControl "Violet Hour"
     ${NSD_CB_AddString} $PaletteControl "Forest After Rain"
-    ${NSD_CB_AddString} $PaletteControl "JSMorley"
 !macroend

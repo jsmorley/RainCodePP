@@ -45,17 +45,6 @@ STYLES = [
 ]
 
 
-JSMORLEY = [
-    ("000000", 0), ("008040", 2), ("6363B1", 1), ("547CC0", 1),
-    ("757575", 0), ("FF0000", 0), ("547CC0", 1), ("00AAB4", 1),
-    ("E65719", 1), ("E65719", 0), ("000000", 0), ("0000A0", 2),
-    ("0080C0", 2), ("008080", 2), ("E65719", 0), ("757575", 0),
-    ("0000FF", 0), ("0000FF", 0), ("00868D", 0), ("38475A", 0),
-    ("507557", 0), ("757575", 0), ("6363B1", 1), ("416CAA", 1),
-    ("AC4D1C", 0), ("757575", 2), ("9B4B81", 0), ("398196", 1),
-    ("516AA1", 0), ("AC4D1C", 1),
-]
-
 IVORY = [
     ("202833", 0), ("2E6036", 2), ("923B0A", 1), ("244E8A", 1),
     ("505A6D", 0), ("A21D36", 1), ("345437", 0), ("006268", 1),
@@ -85,7 +74,6 @@ PALETTES = [
     ("Dark", "Deep Current", "142830", "DAEEF3 9EBFC9 88B9A7 8BCFF5 8CDFD4 CDB5EF F9B69B F1D291 FBA2BC"),
     ("Dark", "Violet Hour", "262035", "EDE4FA B9ABCE A4BCAC ABAFFF 96DFD1 E9B4FC F7AEAB F4D29F FFA2C0"),
     ("Dark", "Forest After Rain", "1D2A25", "E2ECE0 A6B8A8 91B799 A7C7FC 8EE1BE D9B8F3 F0B199 E7D395 F9A8B7"),
-    ("Example", "JSMorley", "FFFFFF", None),
 ]
 ROLES = [0, 2, 3, 3, 1, 8, 4, 5, 6, 6, 7, 1, 1, 5, 5, 1,
          3, 5, 5, 1, 2, 1, 5, 4, 7, 1, 5, 4, 3, 7]
@@ -102,7 +90,7 @@ def main():
     config = root / "Config/Presets"
     config.mkdir(exist_ok=True)
     for family, theme, background, accents in PALETTES:
-        style_overrides = {"Ivory": IVORY, "JSMorley": JSMORLEY}.get(theme, ())
+        style_overrides = IVORY if theme == "Ivory" else ()
         document = ET.Element("NotepadPlus")
         languages = ET.SubElement(document, "Languages")
         ET.SubElement(languages, "Language", name="Rainmeter5", ext="ini inc",
@@ -120,13 +108,9 @@ def main():
             if theme == "Ivory":
                 face = "Tahoma"
                 size = "14"
-            elif theme == "JSMorley":
-                face = "DejaVu Sans Mono"
-                size = "14"
-            if theme != "JSMorley" or id_ >= len(JSMORLEY):
-                high, low = sorted((luminance(color), luminance(background)), reverse=True)
-                if (high + 0.05) / (low + 0.05) < 4.5:
-                    raise ValueError(f"{theme} has low contrast for {name}: #{color} on #{background}")
+            high, low = sorted((luminance(color), luminance(background)), reverse=True)
+            if (high + 0.05) / (low + 0.05) < 4.5:
+                raise ValueError(f"{theme} has low contrast for {name}: #{color} on #{background}")
             # Leave room for Scintilla's predefined editor styles.
             style_id = id_ if id_ < len(ROLES) else id_ - len(ROLES) + 40
             ET.SubElement(lexer, "WordsStyle", name=name, styleID=str(style_id), fgColor=color,

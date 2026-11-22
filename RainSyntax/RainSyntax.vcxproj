@@ -163,6 +163,7 @@
     <ClCompile Include="HelpPanel.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ButtonTooltips.h" />
     <ClInclude Include="Syntax.h" />
     <ClInclude Include="Palette.h" />
     <ClInclude Include="SkinCommands.h" />

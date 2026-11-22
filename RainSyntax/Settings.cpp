@@ -7,6 +7,7 @@
 #include <shellapi.h>
 #include <shlobj.h>
 
+#include "ButtonTooltips.h"
 #include "Palette.h"
 #include "SettingsFiles.h"
 #include "RestartSession.h"
@@ -154,6 +155,11 @@ struct ColorPicker {
             picker.window = window;
             SetWindowLongPtrW(window, DWLP_USER, lParam);
             SetWindowTextW(window, picker.title);
+            AddButtonTooltips(window, {
+                {IDC_VISUAL_COLOR, L"Open the visual color picker."},
+                {IDOK, L"Use this color in the palette you are editing."},
+                {IDCANCEL, L"Close the picker and discard this color selection."},
+            });
             SendDlgItemMessageW(window, IDC_HEX_COLOR, EM_SETLIMITTEXT, 64, 0);
             for (const int field : {IDC_RED_COLOR, IDC_GREEN_COLOR, IDC_BLUE_COLOR})
                 SendDlgItemMessageW(window, field, EM_SETLIMITTEXT, 3, 0);
@@ -638,6 +644,23 @@ struct Editor {
             SendMessageW(Control(IDC_STYLE_ID), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(item.name.c_str()));
         SendMessageW(Control(IDC_STYLE_ID), CB_SETCURSEL, 0, 0);
         styleTooltips.Attach(Control(IDC_STYLE_ID));
+        AddButtonTooltips(window, {
+            {IDC_FIND_NEXT, L"Find the next matching term in the selected category."},
+            {IDC_RESET_TERMS, L"Replace this category's edits with the built-in vocabulary."},
+            {IDC_SAVE_TERMS, L"Save vocabulary edits for the next time Notepad++ starts."},
+            {IDC_USE_PRESET, L"Copy the previewed preset into the palette you can edit or apply."},
+            {IDC_FOREGROUND, L"Choose the text color for the selected syntax style."},
+            {IDC_BACKGROUND, L"Choose the background color for the selected syntax style."},
+            {IDC_ALL_BACKGROUNDS, L"Set one background color for every Rainmeter syntax style and the editor area."},
+            {IDC_FONT, L"Choose the font, size, and emphasis for the selected syntax style."},
+            {IDC_APPLY, L"Save the palette and apply it to Rainmeter tabs in Notepad++."},
+            {IDC_ACTIVE, L"Reload the palette currently in use by Notepad++."},
+            {IDC_IMPORT, L"Load a RainSyntax palette XML file for editing."},
+            {IDC_EXPORT, L"Export the edited palette to a separate XML file."},
+            {IDC_BACKUP, L"Open the folder containing any original RainLexer files saved by setup."},
+            {IDC_UNINSTALL, L"Start the RainSyntax uninstaller."},
+            {IDCANCEL, L"Close RainSyntax Settings."},
+        });
         UpdateStyleFields();
         RestoreWindowPosition();
     }
