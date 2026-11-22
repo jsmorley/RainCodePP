@@ -58,7 +58,7 @@ The **Notepad++ Style Configurator** link at the bottom of the sidebar opens the
 
 ## 5. Add or edit Rainmeter terms
 
-In **Edit vocabulary and palettes**, choose a vocabulary category. Edit one term per line. In a fixed-value category use `Option=Value`. Enter the base name, such as `IfCondition`, in the numbered-options category. For bangs, leave out the leading `!`.
+In **Edit vocabulary and palettes**, choose a vocabulary category. Add a term on the blank line at the top. Terms sort alphabetically when you revisit the category or save the vocabulary. Edit one term per line. In a fixed-value category use `Option=Value`. Enter the base name, such as `IfCondition`, in the numbered-options category. For bangs, leave out the leading `!`.
 
 Use **Find next** to locate a term. **Restore category** reloads its built-in list. **Save vocabulary** keeps the additions, removals, and spelling changes. They take effect the next time Notepad++ opens.
 

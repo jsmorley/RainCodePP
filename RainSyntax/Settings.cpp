@@ -606,8 +606,27 @@ struct Editor {
 
     void ShowTerms()
     {
+        std::wistringstream input(Wide(words[group]));
+        std::vector<std::wstring> entries;
+        for (std::wstring entry; std::getline(input, entry);)
+        {
+            if (entry.ends_with(L'\r')) entry.pop_back();
+            if (!entry.empty()) entries.push_back(std::move(entry));
+        }
+        std::stable_sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
+            return CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) == CSTR_LESS_THAN;
+        });
+        std::wstring text;
+        for (const auto& entry : entries)
+        {
+            text += L"\r\n";
+            text += entry;
+        }
         updating = true;
-        SetDlgItemTextW(window, IDC_TERMS, Wide(words[group]).c_str());
+        const auto control = Control(IDC_TERMS);
+        SetWindowTextW(control, text.c_str());
+        SendMessageW(control, EM_SETSEL, 0, 0);
+        SendMessageW(control, EM_SCROLLCARET, 0, 0);
         updating = false;
     }
 

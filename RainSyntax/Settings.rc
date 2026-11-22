@@ -11,7 +11,7 @@ FONT 9, "Segoe UI"
 BEGIN
     GROUPBOX "Vocabulary", -1, 8, 7, 232, 298
     COMBOBOX IDC_GROUP, 17, 22, 214, 125, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT "Edit one term per line. Changes apply after restarting Notepad++.", -1, 17, 42, 214, 23
+    LTEXT "Add a term on the blank line at the top. Changes apply after restarting Notepad++.", -1, 17, 42, 214, 23
     EDITTEXT IDC_FIND, 17, 62, 155, 14, ES_AUTOHSCROLL | WS_TABSTOP
     PUSHBUTTON "Find next", IDC_FIND_NEXT, 178, 62, 53, 14
     EDITTEXT IDC_TERMS, 17, 82, 214, 194, ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_TABSTOP
