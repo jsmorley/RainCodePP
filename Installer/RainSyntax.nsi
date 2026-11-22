@@ -10,15 +10,17 @@ SetCompressor /SOLID lzma
 !define PBS_MARQUEE 0x08
 
 Name "RainSyntax for Notepad++"
-OutFile "..\out\RainSyntax-1.0.28-Setup.exe"
-VIProductVersion "1.0.28.0"
+OutFile "..\out\RainSyntax-1.0.29-Setup.exe"
+VIProductVersion "1.0.29.0"
 VIAddVersionKey "ProductName" "RainSyntax"
 VIAddVersionKey "FileDescription" "RainSyntax Setup for Notepad++"
-VIAddVersionKey "FileVersion" "1.0.28"
+VIAddVersionKey "FileVersion" "1.0.29"
 VIAddVersionKey "LegalCopyright" "Copyright 2026 Jeffrey Morley. Based on RainLexer by the Rainmeter Team."
 !define MUI_DIRECTORYPAGE_TEXT_TOP "Choose the folder containing notepad++.exe. Setup installs or updates RainSyntax in that copy of Notepad++."
 !define MUI_FINISHPAGE_TEXT "RainSyntax is ready. Open Notepad++ and use Language > Rainmeter 5 or Plugins > RainSyntax > Settings sidebar."
 !define MUI_UNCONFIRMPAGE_TEXT_TOP "Uninstall closes Notepad++ normally, removes RainSyntax, and reopens Notepad++. You can save open files when prompted."
+!define MUI_ICON "..\RainSyntax\Rainmeter.ico"
+!define MUI_UNICON "..\RainSyntax\Rainmeter.ico"
 !insertmacro MUI_PAGE_WELCOME
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE CheckDirectory
 !insertmacro MUI_PAGE_DIRECTORY
@@ -31,6 +33,7 @@ Page custom PalettePage SavePalette
 !insertmacro MUI_LANGUAGE "English"
 
 Var Palette
+Var PaletteLabel
 Var PaletteControl
 Var ProgramFilesOnly
 
@@ -125,21 +128,26 @@ Function PalettePage
     ${If} ${FileExists} "$INSTDIR\doLocalConf.xml"
         StrCpy $1 "$INSTDIR"
     ${EndIf}
+    StrCpy $3 ""
     ${If} ${FileExists} "$1\plugins\config\RainSyntax.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainSyntax-palette.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainCodePP.xml"
     ${OrIf} ${FileExists} "$1\plugins\config\RainCodePP-palette.xml"
     ${OrIf} ${FileExists} "$INSTDIR\plugins\config\RainCodePP.xml"
-    ${OrIf} ${FileExists} "$INSTDIR\plugins\config\RainLexer.xml"
-    ${OrIf} ${FileExists} "$1\plugins\config\RainLexer.xml"
         ${NSD_LB_AddString} $PaletteControl "Keep Current Style"
-        StrCpy $3 "Keep Current Style preserves your RainSyntax palette or imports your RainLexer styles on a first install."
-    ${Else}
+        StrCpy $3 "Keep Current Style uses your saved RainSyntax palette."
+    ${EndIf}
+    ${If} ${FileExists} "$INSTDIR\plugins\config\RainLexer.xml"
+    ${OrIf} ${FileExists} "$1\plugins\config\RainLexer.xml"
+        ${NSD_LB_AddString} $PaletteControl "Import RainLexer Style"
+        StrCpy $3 "$3 Import RainLexer Style copies the original RainLexer palette."
+    ${EndIf}
+    ${If} $3 == ""
         ${NSD_LB_AddString} $PaletteControl "Match Notepad++ mode"
         StrCpy $3 "Match Notepad++ mode picks a light or dark default based on your Notepad++ setting."
     ${EndIf}
     !insertmacro AddPalettes
-    SendMessage $PaletteControl ${LB_FINDSTRINGEXACT} -1 "STR:$Palette" $2
+    SendMessage $PaletteControl ${LB_FINDSTRINGEXACT} -1 "STR:$PaletteLabel" $2
     ${If} $2 == -1
         StrCpy $2 0
     ${EndIf}
@@ -150,7 +158,18 @@ Function PalettePage
 FunctionEnd
 
 Function SavePalette
-    ${NSD_LB_GetSelection} $PaletteControl $Palette
+    ${NSD_LB_GetSelection} $PaletteControl $PaletteLabel
+    StrCpy $Palette $PaletteLabel
+    ; Only bundled palettes have a mode suffix. PowerShell receives the base name.
+    StrCpy $0 $PaletteLabel 8 -8
+    ${If} $0 == " (Light)"
+        StrCpy $Palette $PaletteLabel -8
+    ${Else}
+        StrCpy $0 $PaletteLabel 7 -7
+        ${If} $0 == " (Dark)"
+            StrCpy $Palette $PaletteLabel -7
+        ${EndIf}
+    ${EndIf}
 FunctionEnd
 
 Function RunInstallScript
@@ -234,7 +253,7 @@ close_apps:
     ${IfNot} ${FileExists} "$INSTDIR\doLocalConf.xml"
         SetRegView 64
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayName" "RainSyntax for Notepad++"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.28"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.29"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "InstallLocation" "$INSTDIR"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "UninstallString" '"$INSTDIR\plugins\RainSyntax\Uninstall RainSyntax.exe"'
         WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "NoModify" 1

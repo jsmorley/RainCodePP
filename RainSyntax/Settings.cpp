@@ -34,6 +34,8 @@ constexpr UINT RemovePresetMessage = WM_APP + 1;
 constexpr wchar_t HiddenPresetsSection[] = L"HiddenPresets";
 constexpr wchar_t SettingsWindowSection[] = L"SettingsWindow";
 constexpr wchar_t PositionKey[] = L"Position";
+constexpr wchar_t SettingsInstanceMutex[] = L"Local\\RainSyntax.Settings";
+constexpr wchar_t SettingsInstanceWindow[] = L"RainSyntax.Settings.Window";
 constexpr std::string_view PreviewLines[] = {
     "[Rainmeter]",
     "; Rainmeter syntax preview",
@@ -54,6 +56,16 @@ std::wstring WindowText(HWND window)
     std::wstring value(GetWindowTextLengthW(window) + 1, L'\0');
     value.resize(GetWindowTextW(window, value.data(), static_cast<int>(value.size())));
     return value;
+}
+
+BOOL CALLBACK ActivateSettingsWindow(HWND window, LPARAM)
+{
+    if (!GetPropW(window, SettingsInstanceWindow)) return TRUE;
+    if (IsIconic(window)) ShowWindowAsync(window, SW_RESTORE);
+    const auto popup = GetLastActivePopup(window);
+    const auto target = IsWindowVisible(popup) ? popup : window;
+    if (!SetForegroundWindow(target)) FlashWindow(target, TRUE);
+    return FALSE;
 }
 
 std::wstring ColorCode(COLORREF color)
@@ -1428,6 +1440,7 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
             editor = reinterpret_cast<Editor*>(lParam);
             editor->window = window;
             SetWindowLongPtrW(window, DWLP_USER, lParam);
+            SetPropW(window, SettingsInstanceWindow, reinterpret_cast<HANDLE>(1));
             if (HICON icon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1)))
                 SendMessageW(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
             editor->Init();
@@ -1435,7 +1448,11 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         }
         if (!editor) return FALSE;
         if (message == WM_WINDOWPOSCHANGED && editor->windowPosition) editor->TrackWindowPosition();
-        if (message == WM_DESTROY) editor->SaveWindowPosition();
+        if (message == WM_DESTROY)
+        {
+            RemovePropW(window, SettingsInstanceWindow);
+            editor->SaveWindowPosition();
+        }
         if (message == WM_COMMAND) return editor->Command(LOWORD(wParam), HIWORD(wParam));
         if (message == WM_CLOSE) { editor->Close(); return TRUE; }
         if (message == WM_TIMER && wParam == RestartTimer) { editor->CheckRestart(); return TRUE; }
@@ -1471,7 +1488,19 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
 {
-    if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) return 1;
+    const auto instanceLock = CreateMutexExW(nullptr, SettingsInstanceMutex, 0, SYNCHRONIZE);
+    if (!instanceLock) return 1;
+    if (GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        EnumWindows(ActivateSettingsWindow, 0);
+        CloseHandle(instanceLock);
+        return 0;
+    }
+    if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)))
+    {
+        CloseHandle(instanceLock);
+        return 1;
+    }
     wchar_t executable[32768]{};
     GetModuleFileNameW(instance, executable, static_cast<DWORD>(std::size(executable)));
     const auto plugin = Path(executable).parent_path();
@@ -1529,6 +1558,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
     }
     if (arguments) LocalFree(arguments);
     CoUninitialize();
+    CloseHandle(instanceLock);
     return result;
 }
 

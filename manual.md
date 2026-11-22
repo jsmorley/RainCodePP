@@ -46,7 +46,7 @@ Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to previ
 
 To remove a preset from your dropdown, hold **Shift** while it is highlighted and click the entry marked **(delete)**. The change applies to your profile and survives upgrades. To restore the entry, close RainSyntax Settings and remove that preset's line from the `[HiddenPresets]` section of `RainSyntax-settings.ini`.
 
-RainSyntax Settings remembers where you last closed it. If that position is outside the available desktop, Settings opens within the nearest monitor's work area.
+RainSyntax Settings remembers where you last closed it. If that position is outside the available desktop, Settings opens within the nearest monitor's work area. Opening Settings again brings the existing window forward.
 
 - **Use preset** copies the preview into your editable palette.
 - In **Set style for syntax types**, hover over a choice for a brief description. Select a type to change its foreground, background, font, size, bold, italic, or underline. Changing the **Default** background updates the blank area of the Rainmeter tab and every style that inherits it. Selecting an individual style and choosing a background creates an override. Use **Set palette background** to clear all overrides and set one background for the entire tab.

@@ -54,7 +54,7 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot, [string]$Directory) {
     if ($Palette -in @('Keep Current Style','Keep') -and ($previous -or $hasSavedPalette)) {
         $source = if ($hasSavedPalette) { Read-StyleXml $previousPalette } else { $previous }
         $oldStyles = $source.SelectSingleNode("/NotepadPlus/LexerStyles/LexerType[@name='Rainmeter5']")
-    } elseif ($Palette -eq 'Keep Current Style') {
+    } elseif ($Palette -in @('Import RainLexer Style','Keep Current Style')) {
         # Match the external lexer loader's application-first lookup order.
         $classicXml = Join-Path $Directory 'plugins\Config\RainLexer.xml'
         if (!(Test-Path -LiteralPath $classicXml -PathType Leaf)) {
@@ -70,7 +70,7 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot, [string]$Directory) {
         }
     }
     $sourceDefault = if ($oldStyles) { $oldStyles.SelectSingleNode("./WordsStyle[@styleID='0']") }
-    if ($Palette -in @('Keep','Keep Current Style','Match Notepad++ mode')) {
+    if ($Palette -in @('Keep','Keep Current Style','Import RainLexer Style','Match Notepad++ mode')) {
         $selected = 'Clear Skies'
         $background = if ($sourceDefault) { $sourceDefault.GetAttribute('bgColor') }
         if ($background -match '^[0-9a-f]{6}$') {
