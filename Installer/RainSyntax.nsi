@@ -10,11 +10,11 @@ SetCompressor /SOLID lzma
 !define PBS_MARQUEE 0x08
 
 Name "RainSyntax for Notepad++"
-OutFile "..\out\RainSyntax-1.0.29-Setup.exe"
-VIProductVersion "1.0.29.0"
+OutFile "..\out\RainSyntax-1.0.30-Setup.exe"
+VIProductVersion "1.0.30.0"
 VIAddVersionKey "ProductName" "RainSyntax"
 VIAddVersionKey "FileDescription" "RainSyntax Setup for Notepad++"
-VIAddVersionKey "FileVersion" "1.0.29"
+VIAddVersionKey "FileVersion" "1.0.30"
 VIAddVersionKey "LegalCopyright" "Copyright 2026 Jeffrey Morley. Based on RainLexer by the Rainmeter Team."
 !define MUI_DIRECTORYPAGE_TEXT_TOP "Choose the folder containing notepad++.exe. Setup installs or updates RainSyntax in that copy of Notepad++."
 !define MUI_FINISHPAGE_TEXT "RainSyntax is ready. Open Notepad++ and use Language > Rainmeter 5 or Plugins > RainSyntax > Settings sidebar."
@@ -36,6 +36,8 @@ Var Palette
 Var PaletteLabel
 Var PaletteControl
 Var ProgramFilesOnly
+Var ThemeArguments
+Var CloseArguments
 
 !macro FindPowerShell
     ; A 32-bit PowerShell process cannot reliably inspect 64-bit Notepad++ processes.
@@ -79,6 +81,13 @@ Function .onInit
         ${GetOptions} $0 "/Palette=" $1
         ${IfNot} ${Errors}
             StrCpy $Palette $1
+        ${EndIf}
+        ${GetOptions} $0 "/ThemeMode=" $1
+        ${IfNot} ${Errors}
+            ${If} $1 == "Light"
+            ${OrIf} $1 == "Dark"
+                StrCpy $ThemeArguments "-ThemeMode $1"
+            ${EndIf}
         ${EndIf}
         ${If} $INSTDIR == ""
             SetErrorLevel 1
@@ -185,7 +194,7 @@ Function RunInstallScript
     ${EndIf}
 
     !insertmacro FindPowerShell
-    nsExec::ExecToStack '"$2" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\Install.ps1" -NppDirectory "$INSTDIR\." -Palette "$Palette" -SetupExecutable "$EXEPATH" $ProgramFilesOnly $3'
+    nsExec::ExecToStack '"$2" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\Install.ps1" -NppDirectory "$INSTDIR\." -Palette "$Palette" -SetupExecutable "$EXEPATH" $ProgramFilesOnly $ThemeArguments $3'
     Pop $0
     Pop $1
 
@@ -222,7 +231,11 @@ Section "RainSyntax"
     File "..\x64-Release\RainSyntax.dll"
     File "..\x64-Release\RainSyntaxSettings.exe"
     DetailPrint "Installing RainSyntax and applying your syntax palette..."
-    Push ""
+    ${IfNot} ${Silent}
+        StrCpy $ThemeArguments "-CheckTheme"
+    ${EndIf}
+run_install:
+    Push $CloseArguments
     Call RunInstallScript
     ${If} $ProgramFilesOnly != ""
         ${If} $0 != 0
@@ -235,15 +248,21 @@ Section "RainSyntax"
         MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Notepad++ or RainSyntax Settings is open.$\r$\n$\r$\nClose them and continue setup? You can save any open work when prompted." /SD IDNO IDYES close_apps
         SetErrorLevel 2
         Abort
-close_apps:
-        DetailPrint "Waiting for Notepad++ and RainSyntax Settings to close. Save open work if prompted."
-        Push "-CloseRunningApps"
-        Call RunInstallScript
-        ${If} $0 == 3
-            MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "An app is still open. Finish saving or closing it, then choose Retry." /SD IDCANCEL IDRETRY close_apps
-            SetErrorLevel 2
-            Abort
+    ${ElseIf} $0 == 3
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "An app is still open. Finish saving or closing it, then choose Retry." /SD IDCANCEL IDRETRY close_apps
+        SetErrorLevel 2
+        Abort
+    ${ElseIf} $0 == 4
+    ${OrIf} $0 == 5
+        ${If} $0 == 4
+            StrCpy $5 "Dark"
+        ${Else}
+            StrCpy $5 "Light"
         ${EndIf}
+        StrCpy $ThemeArguments ""
+        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Switch Notepad++ to $5 mode to match this palette?$\r$\n$\r$\nChoose Yes to set the mode manually or No to keep your current settings." /SD IDNO IDNO run_install
+        StrCpy $ThemeArguments "-ThemeMode $5"
+        Goto run_install
     ${EndIf}
     ${If} $0 != 0
         MessageBox MB_ICONSTOP "RainSyntax setup failed.$\r$\n$1" /SD IDOK
@@ -253,7 +272,7 @@ close_apps:
     ${IfNot} ${FileExists} "$INSTDIR\doLocalConf.xml"
         SetRegView 64
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayName" "RainSyntax for Notepad++"
-        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.29"
+        WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "DisplayVersion" "1.0.30"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "InstallLocation" "$INSTDIR"
         WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "UninstallString" '"$INSTDIR\plugins\RainSyntax\Uninstall RainSyntax.exe"'
         WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainSyntax" "NoModify" 1
@@ -263,6 +282,11 @@ close_apps:
             DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\RainCodePP"
         ${EndIf}
     ${EndIf}
+    Goto install_done
+close_apps:
+    DetailPrint "Waiting for Notepad++ and RainSyntax Settings to close. Save open work if prompted."
+    StrCpy $CloseArguments "-CloseRunningApps"
+    Goto run_install
 install_done:
 SectionEnd
 

@@ -12,6 +12,8 @@ RainSyntax adds Rainmeter syntax highlighting and optional typing assistance for
 
 Automatic completion, capitalization correction, and obvious typo correction start enabled on a fresh install. Each setting can be turned off independently. Upgrades preserve those choices and your RainSyntax vocabulary edits.
 
+If the palette and Notepad++ use different light or dark modes, Setup offers to switch Notepad++ to match. Choose **Yes** to set the mode manually, or **No** to install the palette and keep the editor's mode.
+
 RainSyntax replaces RainCode++. Install it over the same Notepad++ copy to carry forward your palette, vocabulary, typing preferences, and plugin shortcuts. Setup removes the old plugin from Notepad++'s active plugin folders. Existing RainCode++ tabs switch to RainSyntax.
 
 ## Using RainSyntax alongside RainLexer

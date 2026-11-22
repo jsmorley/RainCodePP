@@ -3,7 +3,9 @@ param(
     [string]$Palette = 'Keep',
     [string]$SetupExecutable,
     [switch]$CloseRunningApps,
-    [switch]$ProgramFilesOnly
+    [switch]$ProgramFilesOnly,
+    [switch]$CheckTheme,
+    [ValidateSet('Light','Dark')][string]$ThemeMode
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClassicBackup.ps1')
@@ -16,11 +18,63 @@ function Remove-InstallScratch([string]$Path) {
     catch { Write-Verbose "The temporary file could not be removed: $Path" }
 }
 
-function Read-StyleXml([string]$Path) {
+function Read-StyleXml([string]$Path, [switch]$PreserveWhitespace) {
     $document = [System.Xml.XmlDocument]::new()
     $document.XmlResolver = $null
+    $document.PreserveWhitespace = $PreserveWhitespace.IsPresent
     $document.Load($Path)
     return ,$document
+}
+
+function Get-PaletteDarkMode([string]$Background) {
+    if ($Background -notmatch '^[0-9a-f]{6}$') { return $null }
+    $red = [Convert]::ToInt32($Background.Substring(0, 2), 16)
+    $green = [Convert]::ToInt32($Background.Substring(2, 2), 16)
+    $blue = [Convert]::ToInt32($Background.Substring(4, 2), 16)
+    return (2126 * $red + 7152 * $green + 722 * $blue) -lt 1280000
+}
+
+function Get-NotepadDarkMode([string]$Profile) {
+    $path = Join-Path $Profile 'config.xml'
+    if (!(Test-Path -LiteralPath $path)) { return $false }
+    try {
+        $document = Read-StyleXml $path
+        if ($document.DocumentElement.Name -ne 'NotepadPlus') { return $null }
+        $mode = $document.SelectSingleNode("/NotepadPlus/GUIConfigs/GUIConfig[@name='DarkMode']")
+        if (!$mode) { return $false }
+        if ($mode.GetAttribute('enableWindowsMode') -eq 'yes') {
+            $personalize = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+            return (Get-ItemPropertyValue -LiteralPath $personalize -Name AppsUseLightTheme -ErrorAction SilentlyContinue) -eq 0
+        }
+        return $mode.GetAttribute('enable') -eq 'yes'
+    } catch {
+        return $null
+    }
+}
+
+function Add-NotepadMode($Payload, [string]$Profile, [string]$Mode) {
+    $path = Join-Path $Profile 'config.xml'
+    $source = if ($Payload.Contains($path)) { $Payload[$path] } else { $path }
+    if (Test-Path -LiteralPath $source) {
+        $document = Read-StyleXml $source -PreserveWhitespace
+        if ($document.DocumentElement.Name -ne 'NotepadPlus') { throw 'Cannot update the Notepad++ settings XML.' }
+    } else {
+        $document = [System.Xml.XmlDocument]::new()
+        $document.LoadXml('<NotepadPlus><GUIConfigs /></NotepadPlus>')
+    }
+    $configs = $document.SelectSingleNode('/NotepadPlus/GUIConfigs')
+    if (!$configs) { $configs = $document.DocumentElement.AppendChild($document.CreateElement('GUIConfigs')) }
+    $settings = $configs.SelectSingleNode("GUIConfig[@name='DarkMode']")
+    if (!$settings) {
+        $settings = $configs.AppendChild($document.CreateElement('GUIConfig'))
+        $settings.SetAttribute('name', 'DarkMode')
+    }
+    $enabled = if ($Mode -eq 'Dark') { 'yes' } else { 'no' }
+    $settings.SetAttribute('enable', $enabled)
+    $settings.SetAttribute('enableWindowsMode', 'no')
+    $staged = Join-Path $PSScriptRoot 'notepad-mode.xml'
+    $document.Save($staged)
+    $Payload[$path] = $staged
 }
 
 function Get-NotepadArchitecture([string]$Exe) {
@@ -73,16 +127,9 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot, [string]$Directory) {
     if ($Palette -in @('Keep','Keep Current Style','Import RainLexer Style','Match Notepad++ mode')) {
         $selected = 'Clear Skies'
         $background = if ($sourceDefault) { $sourceDefault.GetAttribute('bgColor') }
-        if ($background -match '^[0-9a-f]{6}$') {
-            $red = [Convert]::ToInt32($background.Substring(0, 2), 16)
-            $green = [Convert]::ToInt32($background.Substring(2, 2), 16)
-            $blue = [Convert]::ToInt32($background.Substring(4, 2), 16)
-            if ((2126 * $red + 7152 * $green + 722 * $blue) -lt 1280000) { $selected = 'Midnight Rain' }
-        } elseif (Test-Path -LiteralPath (Join-Path $configRoot 'config.xml')) {
-            [xml]$nppConfig = Get-Content -LiteralPath (Join-Path $configRoot 'config.xml') -Raw
-            $dark = $nppConfig.SelectSingleNode("//GUIConfig[@name='DarkMode']")
-            if ($null -ne $dark -and $dark.GetAttribute('enable') -eq 'yes') { $selected = 'Midnight Rain' }
-        }
+        $dark = Get-PaletteDarkMode $background
+        if ($null -eq $dark) { $dark = Get-NotepadDarkMode $ConfigRoot }
+        if ($dark) { $selected = 'Midnight Rain' }
     }
     $presets = Join-Path $PSScriptRoot 'Presets'
     $manifest = Join-Path $presets 'Palettes.txt'
@@ -218,8 +265,21 @@ function Install-RainSyntax {
     $lexerXml = if ($config) { Join-Path $config 'RainSyntax.xml' }
     $writeProfile = $profile -and (!$portable -or !$elevate)
     $payload = [ordered]@{}
+    if ($CheckTheme) {
+        $preview = if ($writeProfile) { $payload } else { [ordered]@{} }
+        Add-ProfileFiles $preview $profile $directory
+        $styles = Read-StyleXml $preview[$lexerXml]
+        $default = $styles.SelectSingleNode("//LexerType[@name='Rainmeter5']/WordsStyle[@styleID='0']")
+        $paletteDark = Get-PaletteDarkMode ($default.GetAttribute('bgColor'))
+        $editorDark = Get-NotepadDarkMode $profile
+        if ($null -ne $paletteDark -and $null -ne $editorDark -and $paletteDark -ne $editorDark) {
+            if ($paletteDark) { exit 4 }
+            exit 5
+        }
+    }
     if ($writeProfile) {
-        Add-ProfileFiles $payload $profile $directory
+        if (!$CheckTheme) { Add-ProfileFiles $payload $profile $directory }
+        if ($ThemeMode) { Add-NotepadMode $payload $profile $ThemeMode }
         if (!$portable -and !(Test-Path -LiteralPath (Join-Path $config 'RainCodePP-backup'))) {
             Write-ClassicBackup $profile (Get-ProfileBackup $profile)
         }
@@ -238,7 +298,8 @@ function Install-RainSyntax {
         if ($elevate) {
             if (!$SetupExecutable) { throw 'Administrator approval is required. Run RainSyntax Setup to continue.' }
             Write-Output 'Installing the program files with administrator approval.'
-            Invoke-ElevatedInstaller $SetupExecutable ("/S /ProgramFilesOnly /Palette=`"$Palette`" /D=$directory")
+            $modeOption = if ($ThemeMode) { " /ThemeMode=$ThemeMode" } else { '' }
+            Invoke-ElevatedInstaller $SetupExecutable ("/S /ProgramFilesOnly /Palette=`"$Palette`"$modeOption /D=$directory")
             if ($portable) { Confirm-LexerXml $lexerXml }
         } else {
             Move-PreviousBackup $programPlugins
