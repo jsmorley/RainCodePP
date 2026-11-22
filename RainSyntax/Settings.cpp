@@ -5,6 +5,9 @@
 #include <commdlg.h>
 #include <commctrl.h>
 #include <dlgs.h>
+#include <richedit.h>
+#include <richole.h>
+#include <tom.h>
 #include <shellapi.h>
 #include <shlobj.h>
 
@@ -30,6 +33,7 @@ constexpr wchar_t DefaultPreset[] = L"Clear Skies";
 constexpr UINT_PTR RestartTimer = 1;
 constexpr UINT_PTR OwnerTimer = 2;
 constexpr UINT_PTR PresetShiftTimer = 3;
+constexpr UINT_PTR PreviewTimer = 4;
 constexpr UINT RemovePresetMessage = WM_APP + 1;
 constexpr wchar_t HiddenPresetsSection[] = L"HiddenPresets";
 constexpr wchar_t SettingsWindowSection[] = L"SettingsWindow";
@@ -56,6 +60,32 @@ std::wstring WindowText(HWND window)
     std::wstring value(GetWindowTextLengthW(window) + 1, L'\0');
     value.resize(GetWindowTextW(window, value.data(), static_cast<int>(value.size())));
     return value;
+}
+
+std::wstring PreviewText(HWND window)
+{
+    GETTEXTLENGTHEX length{GTL_PRECISE | GTL_NUMCHARS, 1200};
+    const auto count = SendMessageW(window, EM_GETTEXTLENGTHEX, reinterpret_cast<WPARAM>(&length), 0);
+    if (count <= 0) return {};
+    std::wstring value(static_cast<size_t>(count) + 1, L'\0');
+    GETTEXTEX request{static_cast<DWORD>(value.size() * sizeof(wchar_t)), GT_RAWTEXT, 1200, nullptr, nullptr};
+    const auto copied = SendMessageW(window, EM_GETTEXTEX, reinterpret_cast<WPARAM>(&request),
+        reinterpret_cast<LPARAM>(value.data()));
+    value.resize(static_cast<size_t>(std::max<LRESULT>(0, copied)));
+    return value;
+}
+
+LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+    UINT_PTR id, DWORD_PTR)
+{
+    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, PreviewEditProc, id);
+    if (message == WM_PASTE || (message == WM_KEYDOWN &&
+        ((wParam == 'V' && GetKeyState(VK_CONTROL) < 0) || (wParam == VK_INSERT && GetKeyState(VK_SHIFT) < 0))))
+    {
+        SendMessageW(window, EM_PASTESPECIAL, CF_UNICODETEXT, 0);
+        return 0;
+    }
+    return DefSubclassProc(window, message, wParam, lParam);
 }
 
 BOOL CALLBACK ActivateSettingsWindow(HWND window, LPARAM)
@@ -519,19 +549,28 @@ struct EditorFont {
     int points = 10;
     int zoom = 0;
 
-    LOGFONTW Resolve(const StyleSettings& style, UINT dpi, bool preview) const
+    int PointSize(const StyleSettings& style, bool preview) const
     {
         const int customSize = _wtoi(style.size.c_str());
         const int baseSize = customSize > 0 ? customSize : points;
         const auto zoomedSize = static_cast<long long>(baseSize) + zoom;
-        const int size = preview ? static_cast<int>(std::clamp(zoomedSize, 2LL, 32767LL)) :
+        return preview ? static_cast<int>(std::clamp(zoomedSize, 2LL, 32767LL)) :
             std::clamp(baseSize, 5, 72);
+    }
+
+    const std::wstring& Family(const StyleSettings& style) const
+    {
+        return style.family.empty() ? family : style.family;
+    }
+
+    LOGFONTW Resolve(const StyleSettings& style, UINT dpi) const
+    {
         LOGFONTW font{};
-        font.lfHeight = -MulDiv(size, dpi, 72);
+        font.lfHeight = -MulDiv(PointSize(style, false), dpi, 72);
         font.lfWeight = style.emphasis & 1 ? FW_BOLD : FW_NORMAL;
         font.lfItalic = (style.emphasis & 2) != 0;
         font.lfUnderline = (style.emphasis & 4) != 0;
-        wcsncpy_s(font.lfFaceName, style.family.empty() ? family.c_str() : style.family.c_str(), _TRUNCATE);
+        wcsncpy_s(font.lfFaceName, Family(style).c_str(), _TRUNCATE);
         return font;
     }
 };
@@ -546,6 +585,8 @@ struct Editor {
     std::vector<std::string> words;
     size_t group = 0, style = 0;
     bool wordsDirty = false, updating = false;
+    bool stylingPreview = false;
+    ComPtr<ITextDocument> previewDocument;
     std::array<COLORREF, 16> customColors{};
     ColorPicker* activeColorPicker = nullptr;
     std::vector<std::wstring> presetNames;
@@ -660,7 +701,9 @@ struct Editor {
                 return;
             }
         }
-        words = ReadVocabulary(ReadTextFile(config / VocabularyFile));
+        const auto vocabulary = ReadTextFile(config / VocabularyFile);
+        words = ReadVocabulary(vocabulary);
+        ConfigureVocabulary(vocabulary);
         for (const auto& entry : VocabularyGroups())
             SendMessageW(Control(IDC_GROUP), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.label));
         SendMessageW(Control(IDC_GROUP), CB_SETCURSEL, 0, 0);
@@ -712,6 +755,7 @@ struct Editor {
             {IDC_UNINSTALL, L"Start the RainSyntax uninstaller."},
             {IDCANCEL, L"Close RainSyntax Settings."},
         });
+        InitPreview();
         UpdateStyleFields();
         RestoreWindowPosition();
     }
@@ -762,6 +806,8 @@ struct Editor {
         }
         CommitFile(temp, target);
         words = ReadVocabulary(content);
+        ConfigureVocabulary(content);
+        StylePreview();
         ShowTerms();
         wordsDirty = false;
         Status(L"Vocabulary saved. Restart Notepad++ to use it.");
@@ -799,7 +845,7 @@ struct Editor {
         FrameRect(dc, &draw.rcItem, brush);
 
         // Keep the button label readable at the control's fixed height.
-        auto font = editorFont.Resolve(item, GetDpiForWindow(window), false);
+        auto font = editorFont.Resolve(item, GetDpiForWindow(window));
         font.lfHeight = -MulDiv(9, GetDpiForWindow(window), 72);
         const HFONT labelFont = CreateFontIndirectW(&font);
         if (labelFont) SelectObject(dc, labelFont);
@@ -830,7 +876,7 @@ struct Editor {
         UpdatePaletteActions();
         InvalidateRect(Control(IDC_FOREGROUND), nullptr, TRUE);
         InvalidateRect(Control(IDC_BACKGROUND), nullptr, TRUE);
-        InvalidateRect(Control(IDC_PREVIEW), nullptr, TRUE);
+        StylePreview();
     }
 
     bool PaletteDirty() const { return palette != activePalette; }
@@ -955,72 +1001,130 @@ struct Editor {
         Status(L"Preset removed from your list.");
     }
 
-    void DrawPreview(const DRAWITEMSTRUCT& draw) const
+    void InitPreview()
     {
-        const auto& colors = presetPreview ? *presetPreview : palette;
-        HBRUSH background = CreateSolidBrush(colors[Default].background);
-        FillRect(draw.hDC, &draw.rcItem, background);
-        DeleteObject(background);
-        const int saved = SaveDC(draw.hDC);
-        IntersectClipRect(draw.hDC, draw.rcItem.left, draw.rcItem.top, draw.rcItem.right, draw.rcItem.bottom);
-        SetBkMode(draw.hDC, OPAQUE);
-        SetTextAlign(draw.hDC, TA_LEFT | TA_BASELINE);
-        std::array<HFONT, StyleCount> fonts{};
-        std::array<TEXTMETRICW, StyleCount> metrics{};
-        const auto original = GetCurrentObject(draw.hDC, OBJ_FONT);
-        const auto dpi = GetDpiForWindow(window);
-        const int margin = MulDiv(9, dpi, 96);
-        int y = draw.rcItem.top + margin;
-        bool variables = false;
+        const auto control = Control(IDC_PREVIEW);
+        ComPtr<IRichEditOle> richEdit;
+        if (!SendMessageW(control, EM_GETOLEINTERFACE, 0, reinterpret_cast<LPARAM>(richEdit.GetAddressOf())) ||
+            FAILED(richEdit.As(&previewDocument)))
+            throw std::runtime_error("Could not initialize the editable preview.");
+        SetWindowSubclass(control, PreviewEditProc, 1, 0);
+        std::wstring sample;
         for (const auto line : PreviewLines)
         {
-            int x = draw.rcItem.left + margin;
-            if (const auto section = SectionName(line); !section.empty())
-                variables = section == "Variables";
-            const auto runs = StyleLine(line, variables);
-            struct Run {
-                size_t start, end;
-                int style;
-            };
-            std::vector<Run> segments;
-            LONG ascent = 0, descent = 0;
-            for (size_t i = 0; i < line.size();)
-            {
-                size_t end = i + 1;
-                while (end < line.size() && runs[end] == runs[i]) ++end;
-                const auto styleId = runs[i];
-                const auto& item = colors[styleId];
-                if (!fonts[styleId])
-                {
-                    const auto font = editorFont.Resolve(item, dpi, true);
-                    fonts[styleId] = CreateFontIndirectW(&font);
-                    SelectObject(draw.hDC, fonts[styleId] ? fonts[styleId] : original);
-                    GetTextMetricsW(draw.hDC, &metrics[styleId]);
-                }
-                ascent = std::max(ascent, metrics[styleId].tmAscent);
-                descent = std::max(descent, metrics[styleId].tmDescent);
-                segments.push_back({i, end, styleId});
-                i = end;
-            }
-            for (const auto& segment : segments)
-            {
-                const auto& item = colors[segment.style];
-                const auto font = fonts[segment.style];
-                SelectObject(draw.hDC, font ? font : original);
-                const auto value = Wide(line.substr(segment.start, segment.end - segment.start));
-                const auto count = static_cast<int>(value.size());
-                SetTextColor(draw.hDC, item.foreground);
-                SetBkColor(draw.hDC, item.background);
-                TextOutW(draw.hDC, x, y + ascent, value.data(), count);
-                SIZE measured{};
-                GetTextExtentPoint32W(draw.hDC, value.data(), count, &measured);
-                x += measured.cx;
-            }
-            y += ascent + descent;
+            if (!sample.empty()) sample += L"\r\n";
+            sample += Wide(line);
         }
-        SelectObject(draw.hDC, original);
-        for (auto font : fonts) if (font) DeleteObject(font);
-        RestoreDC(draw.hDC, saved);
+        SetWindowTextW(control, sample.c_str());
+        SendMessageW(control, EM_EMPTYUNDOBUFFER, 0, 0);
+        SendMessageW(control, EM_SETEVENTMASK, 0, ENM_CHANGE);
+    }
+
+    void StylePreview()
+    {
+        KillTimer(window, PreviewTimer);
+        if (!previewDocument || stylingPreview) return;
+        const auto control = Control(IDC_PREVIEW);
+        const auto text = PreviewText(control);
+        const auto& colors = presetPreview ? *presetPreview : palette;
+
+        struct Line {
+            std::string text;
+            long start;
+        };
+        std::vector<Line> lines;
+        for (size_t start = 0; start < text.size();)
+        {
+            auto end = text.find_first_of(L"\r\n", start);
+            if (end == std::wstring::npos) end = text.size();
+            lines.push_back({Utf8(std::wstring_view(text).substr(start, end - start)), static_cast<long>(start)});
+            start = end + (text.compare(end, 2, L"\r\n") == 0 ? 2 : 1);
+        }
+
+        struct Run {
+            long start, end;
+            unsigned char style;
+        };
+        std::vector<Run> runs;
+        for (size_t first = 0; first < lines.size();)
+        {
+            const auto name = SectionName(lines[first].text);
+            const bool variables = name.size() == 9 && _strnicmp(name.data(), "Variables", 9) == 0;
+            bool regexSubstitute = false;
+            size_t after = first;
+            do
+            {
+                if (!variables)
+                {
+                    if (const auto flag = RegexSubstituteSetting(lines[after].text)) regexSubstitute = *flag;
+                }
+                ++after;
+            } while (after < lines.size() && SectionName(lines[after].text).empty());
+
+            for (; first < after; ++first)
+            {
+                const auto& line = lines[first];
+                const auto styles = StyleLine(line.text, variables, regexSubstitute);
+                long position = line.start;
+                for (size_t byte = 0; byte < styles.size();)
+                {
+                    const auto styleId = styles[byte];
+                    const auto lead = static_cast<unsigned char>(line.text[byte]);
+                    const int width = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+                    const long end = position + (width == 4 ? 2 : 1);
+                    if (styleId != Default)
+                    {
+                        if (!runs.empty() && runs.back().end == position && runs.back().style == styleId)
+                            runs.back().end = end;
+                        else runs.push_back({position, end, styleId});
+                    }
+                    position = end;
+                    byte += width;
+                }
+            }
+        }
+
+        ComPtr<ITextRange> range;
+        ComPtr<ITextFont> attached;
+        if (FAILED(previewDocument->Range(0, 0, range.GetAddressOf())) ||
+            FAILED(range->GetFont(attached.GetAddressOf()))) return;
+        std::array<ComPtr<ITextFont>, StyleCount> fonts;
+        const auto prepareFont = [&](unsigned char id) {
+            auto& font = fonts[id];
+            if (font || FAILED(attached->GetDuplicate(font.GetAddressOf()))) return;
+            const auto& item = colors[id];
+            font->SetName(_bstr_t(editorFont.Family(item).c_str()));
+            font->SetSize(static_cast<float>(editorFont.PointSize(item, true)));
+            font->SetBold(item.emphasis & 1 ? tomTrue : tomFalse);
+            font->SetItalic(item.emphasis & 2 ? tomTrue : tomFalse);
+            font->SetUnderline(item.emphasis & 4 ? tomSingle : tomNone);
+            font->SetForeColor(item.foreground);
+            font->SetBackColor(item.background);
+        };
+        prepareFont(Default);
+        for (const auto& run : runs) prepareFont(run.style);
+
+        stylingPreview = true;
+        POINT scroll{};
+        SendMessageW(control, EM_GETSCROLLPOS, 0, reinterpret_cast<LPARAM>(&scroll));
+        previewDocument->Freeze(nullptr);
+        previewDocument->Undo(tomSuspend, nullptr);
+        SendMessageW(control, EM_SETBKGNDCOLOR, 0, colors[Default].background);
+        if (fonts[Default])
+        {
+            range->SetRange(0, static_cast<long>(text.size()) + 1);
+            range->SetFont(fonts[Default].Get());
+        }
+        for (const auto& run : runs)
+        {
+            if (!fonts[run.style]) continue;
+            range->SetRange(run.start, run.end);
+            range->SetFont(fonts[run.style].Get());
+        }
+        previewDocument->Undo(tomResume, nullptr);
+        previewDocument->Unfreeze(nullptr);
+        SendMessageW(control, EM_SETSCROLLPOS, 0, reinterpret_cast<LPARAM>(&scroll));
+        stylingPreview = false;
     }
 
     void PickColor(bool foreground, bool entirePalette = false)
@@ -1054,7 +1158,7 @@ struct Editor {
     {
         const auto index = entirePalette ? static_cast<size_t>(Default) : style;
         auto& item = palette[index];
-        auto font = editorFont.Resolve(item, GetDpiForWindow(window), false);
+        auto font = editorFont.Resolve(item, GetDpiForWindow(window));
         CHOOSEFONTW choose{sizeof(choose)};
         choose.hwndOwner = window;
         choose.lpLogFont = &font;
@@ -1376,6 +1480,9 @@ struct Editor {
         case IDC_TERMS:
             if (event == EN_CHANGE && !updating) wordsDirty = true;
             break;
+        case IDC_PREVIEW:
+            if (event == EN_CHANGE && !stylingPreview) SetTimer(window, PreviewTimer, 35, nullptr);
+            break;
         case IDC_FIND_NEXT: FindNext(); break;
         case IDC_RESET_TERMS:
             if (MessageBoxW(window, L"Restore the built-in terms for this category?",
@@ -1474,6 +1581,7 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         if (message == WM_TIMER && wParam == RestartTimer) { editor->CheckRestart(); return TRUE; }
         if (message == WM_TIMER && wParam == OwnerTimer) { editor->CheckOwner(); return TRUE; }
         if (message == WM_TIMER && wParam == PresetShiftTimer) { editor->RefreshPresetShift(); return TRUE; }
+        if (message == WM_TIMER && wParam == PreviewTimer) { editor->StylePreview(); return TRUE; }
         if (message == RemovePresetMessage) { editor->RemovePreset(static_cast<size_t>(wParam)); return TRUE; }
         if (message == WM_DRAWITEM && wParam == IDC_PRESET)
         {
@@ -1483,11 +1591,6 @@ INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
         if (message == WM_DRAWITEM && (wParam == IDC_FOREGROUND || wParam == IDC_BACKGROUND))
         {
             editor->DrawColorButton(*reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
-            return TRUE;
-        }
-        if (message == WM_DRAWITEM && wParam == IDC_PREVIEW)
-        {
-            editor->DrawPreview(*reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
             return TRUE;
         }
     }
@@ -1563,9 +1666,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
             if (!directory.has_filename()) directory = directory.parent_path();
             nppSettings = directory.parent_path().parent_path();
         }
-        Editor editor(config, plugin, nppSettings, owner, std::move(editorFont));
-        result = static_cast<int>(DialogBoxParamW(instance, MAKEINTRESOURCEW(IDD_EDITOR), nullptr,
-            Dialog, reinterpret_cast<LPARAM>(&editor)));
+        const auto richEdit = LoadLibraryExW(L"Msftedit.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (richEdit)
+        {
+            Editor editor(config, plugin, nppSettings, owner, std::move(editorFont));
+            result = static_cast<int>(DialogBoxParamW(instance, MAKEINTRESOURCEW(IDD_EDITOR), nullptr,
+                Dialog, reinterpret_cast<LPARAM>(&editor)));
+            editor.previewDocument.Reset();
+            FreeLibrary(richEdit);
+        }
     }
     else
     {
