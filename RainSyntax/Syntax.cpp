@@ -311,7 +311,8 @@ public:
         else option = ReadOption(key);
         const auto value = TrimRange({equals + 1, line.end});
         if (regexSubstitute && option == "substitute") ReadRegexSubstitutions(value);
-        else ReadValue(value, option, 0, variable && IsColorVariable(Slice(key)));
+        else ReadValue(value, option, 0, variable && IsColorVariable(Slice(key)),
+            !variable && key.start < key.end && styles[key.start] == Default);
     }
 
     std::vector<unsigned char> styles;
@@ -413,7 +414,113 @@ private:
         if (option != "plugin" && option != "playername") Paint(range, InvalidValue);
     }
 
-    void ReadValue(Range range, const std::string& option, unsigned depth, bool colorVariable = false)
+    void ReadShapeReference(Range range, unsigned depth)
+    {
+        range = TrimRange(range);
+        Paint(range, Reference);
+        Scan(range, {}, depth);
+    }
+
+    void ReadShapeModifiers(Range range, unsigned depth)
+    {
+        while (range.start < range.end)
+        {
+            const auto end = FindTopLevelDelimiter(range, '|');
+            const auto part = TrimRange({range.start, end});
+            const auto modifier = Term(part.start, part.end);
+            const auto name = Lower(Slice(modifier));
+            Match(modifier, Words().modifiers, Selector);
+            const auto args = TrimRange({modifier.end, part.end});
+            if (name == "extend" || name == "transformorder")
+            {
+                for (size_t start = args.start; start < args.end;)
+                {
+                    const auto comma = FindTopLevelDelimiter({start, args.end}, ',');
+                    const auto entry = TrimRange({start, comma});
+                    if (name == "extend") ReadShapeReference(entry, depth);
+                    else
+                    {
+                        const auto transform = Lower(Slice(entry));
+                        if (transform == "rotate" || transform == "scale" || transform == "skew" || transform == "offset")
+                            Paint(entry, Selector);
+                        else Scan(entry, {.numbers = true}, depth);
+                    }
+                    if (comma < args.end) Paint({comma, comma + 1}, Operator);
+                    start = comma + 1;
+                }
+            }
+            else if (name == "union" || name == "xor" || name == "intersect" || name == "exclude")
+                ReadShapeReference(args, depth);
+            else if (name == "fill" || name == "stroke" || name == "strokestartcap" ||
+                name == "strokeendcap" || name == "strokedashcap" || name == "strokelinejoin")
+            {
+                const auto value = Term(args.start, args.end);
+                Match(value, Words().shapeValues, Value);
+                const auto kind = Lower(Slice(value));
+                const auto parameter = TrimRange({value.end, args.end});
+                if (kind == "lineargradient" || kind == "lineargradient1" ||
+                    kind == "radialgradient" || kind == "radialgradient1")
+                    ReadShapeReference(parameter, depth);
+                else if (kind != "color" || !TryColor(parameter, depth))
+                    Scan(parameter, {.numbers = true}, depth);
+            }
+            else Scan(args, {.numbers = true}, depth);
+
+            if (end < range.end) Paint({end, end + 1}, Pipe);
+            range.start = end + 1;
+        }
+    }
+
+    void ReadShape(Range range, unsigned depth)
+    {
+        const auto end = FindTopLevelDelimiter(range, '|');
+        const auto primitive = Term(range.start, end);
+        if (!Match(primitive, Words().shapes, Value) && primitive.start != primitive.end)
+            Paint(primitive, InvalidValue);
+        const auto name = Lower(Slice(primitive));
+        const Range arguments{primitive.end, end};
+        if (name == "path" || name == "path1" || name == "combine") ReadShapeReference(arguments, depth);
+        else Scan(arguments, {.numbers = true}, depth);
+        if (end == range.end) return;
+        Paint({end, end + 1}, Pipe);
+        ReadShapeModifiers({end + 1, range.end}, depth);
+    }
+
+    bool ReadShapeGradient(Range range, unsigned depth)
+    {
+        const auto firstPipe = FindTopLevelDelimiter(range, '|');
+        if (firstPipe == range.start || firstPipe == range.end) return false;
+        const auto firstEnd = FindTopLevelDelimiter({firstPipe + 1, range.end}, '|');
+        const auto firstSeparator = FindTopLevelDelimiter({firstPipe + 1, firstEnd}, ';');
+        if (firstSeparator == firstEnd) return false;
+        const auto position = TrimRange({firstSeparator + 1, firstEnd});
+        const auto startsNumeric = [](View value) {
+            return !value.empty() && (Digit(value.front()) || View("+-.[(#$%").find(value.front()) != Missing);
+        };
+        if (!startsNumeric(Slice({range.start, firstPipe})) || !startsNumeric(Slice(position))) return false;
+        const auto color = TrimRange({firstPipe + 1, firstSeparator});
+        if (color.start == color.end ||
+            (!TryColor(color, depth) && View("[#$%").find(text[color.start]) == Missing)) return false;
+
+        Scan({range.start, firstPipe}, {.numbers = true}, depth);
+        for (size_t pipe = firstPipe; pipe < range.end;)
+        {
+            Paint({pipe, pipe + 1}, Pipe);
+            const Range stop{pipe + 1, FindTopLevelDelimiter({pipe + 1, range.end}, '|')};
+            const auto separator = FindTopLevelDelimiter(stop, ';');
+            if (!TryColor({stop.start, separator}, depth)) Scan({stop.start, separator}, {.numbers = true}, depth);
+            if (separator < stop.end)
+            {
+                Paint({separator, separator + 1}, Operator);
+                Scan({separator + 1, stop.end}, {.numbers = true}, depth);
+            }
+            pipe = stop.end;
+        }
+        return true;
+    }
+
+    void ReadValue(Range range, const std::string& option, unsigned depth, bool colorVariable = false,
+        bool namedDefinition = false)
     {
         if (range.start == range.end || depth >= 32) return;
         const bool regex = IsRegexOption(option);
@@ -452,9 +559,24 @@ private:
             option == "tooltiptext" || option == "tooltiptitle" || option == "fontface" ||
             option == "parameter" || option == "program" || option == "filename" ||
             option.ends_with("path") || option.ends_with("action") || option.ends_with("name");
-        const bool isShape = option == "shape";
+        if (option == "shape")
+        {
+            ReadShape(range, depth);
+            return;
+        }
+        if (!literal && namedDefinition)
+        {
+            const auto first = Lower(Slice(Term(range.start, range.end)));
+            if (Words().modifiers.contains(first) && first != "union" && first != "xor" &&
+                first != "intersect" && first != "exclude")
+            {
+                ReadShapeModifiers(range, depth);
+                return;
+            }
+            if (ReadShapeGradient(range, depth)) return;
+        }
         const bool isInline = option == "inlinesetting";
-        const bool list = isShape || isInline || option == "flags" || option == "group" || option == "@inherit" ||
+        const bool list = isInline || option == "flags" || option == "group" || option == "@inherit" ||
             option == "meterstyle" || option == "actionlist" || option == "information" || option == "update" ||
             option == "blacklist" || option == "whitelist";
         const bool color = colorVariable || HasColorSuffix(option);
@@ -462,24 +584,24 @@ private:
             option == "container" || option.starts_with("measurename");
 
         EnumValue(range, option);
-        if (isShape || isInline)
+        if (isInline)
         {
             const Range term = Term(range.start, range.end);
-            if (!Match(term, isShape ? Words().shapes : Words().inlines, Value) && term.start != term.end)
+            if (!Match(term, Words().inlines, Value) && term.start != term.end)
                 Paint(term, InvalidValue);
         }
         if (color && TryColor(range, depth)) return;
         if (references) Paint(range, Reference);
         const bool inlineColor = isInline && Lower(Slice(Term(range.start, range.end))) == "color";
         Scan(range, {.formula = formula, .numbers = !literal && !references, .pipes = list,
-            .format = format, .shape = isShape, .inlines = isInline, .flags = option == "flags",
-            .colors = inlineColor, .paths = !literal && !references && !isShape && !isInline,
+            .format = format, .inlines = isInline, .flags = option == "flags",
+            .colors = inlineColor, .paths = !literal && !references && !isInline,
             .invisibleUpdate = option == "update"}, depth);
     }
 
     struct Context {
         bool formula = false, numbers = false, pipes = false, format = false;
-        bool shape = false, inlines = false, flags = false, calls = false, colors = false, paths = false;
+        bool inlines = false, flags = false, calls = false, colors = false, paths = false;
         bool invisibleUpdate = false;
         Style numericStyle = Number;
     };
@@ -580,7 +702,7 @@ private:
         }
     }
 
-    size_t FindColorDelimiter(Range range, char delimiter) const
+    size_t FindTopLevelDelimiter(Range range, char delimiter) const
     {
         unsigned parentheses = 0;
         for (size_t i = range.start; i < range.end; ++i)
@@ -617,7 +739,7 @@ private:
         while (true)
         {
             if (count == parts.size()) return false;
-            const size_t end = FindColorDelimiter({start, range.end}, ',');
+            const size_t end = FindTopLevelDelimiter({start, range.end}, ',');
             const auto part = TrimRange({start, end});
             const auto value = Slice(part);
             if (value.empty()) return false;
@@ -805,8 +927,6 @@ private:
     {
         if (depth >= 32) return;
         unsigned parentheses = 0;
-        bool modifier = false;
-        bool shapeValue = false;
         bool colorNext = false;
         const auto& catalog = Words();
         for (size_t i = range.start; i < range.end;)
@@ -826,7 +946,7 @@ private:
             if (colorNext && !Space(ch) && ch != '|')
             {
                 colorNext = false;
-                const auto end = FindColorDelimiter({i, range.end}, '|');
+                const auto end = FindTopLevelDelimiter({i, range.end}, '|');
                 if (TryColor({i, end}, depth))
                 {
                     i = end;
@@ -871,8 +991,6 @@ private:
                     context.invisibleUpdate = false;
                 }
                 if (path) Match(part, catalog.path, Selector);
-                modifier = context.shape;
-                shapeValue = false;
                 colorNext = context.colors;
             }
             else if (ch == '%' && i + 1 < range.end && Digit(text[i + 1]))
@@ -912,29 +1030,9 @@ private:
                 size_t j = i;
                 while (j < range.end && Word(text[j])) ++j;
                 Range word{i, j};
-                const auto lower = Lower(Slice(word));
                 if (context.calls && j < range.end && text[j] == '(') Paint(word, Function);
                 if (formula) Match(word, catalog.functions, Function);
                 if (context.flags) Match(word, catalog.flags, Value);
-                if (modifier)
-                {
-                    Match(word, catalog.modifiers, Selector);
-                    shapeValue = lower == "fill" || lower == "stroke" || lower.starts_with("strokecap") ||
-                        lower.starts_with("strokestartcap") || lower.starts_with("strokeendcap") ||
-                        lower.starts_with("strokedashcap") || lower == "strokelinejoin";
-                    modifier = false;
-                }
-                else if (shapeValue)
-                {
-                    Match(word, catalog.shapeValues, Value);
-                    shapeValue = false;
-                    colorNext = lower == "color";
-                }
-                else if (context.shape && lower.starts_with("shape") && lower.size() > 5 &&
-                    std::all_of(lower.begin() + 5, lower.end(), Digit))
-                    Paint(word, Reference);
-                else if (context.shape && catalog.path.contains(lower))
-                    Paint(word, Selector);
                 i = word.end;
                 continue;
             }

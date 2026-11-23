@@ -23,6 +23,8 @@ The red, green, blue, and alpha channels have separate styles in recognized colo
 
 Relative `X` and `Y` suffixes have separate styles. Lowercase `r` measures from the previous meter’s left or top edge. Uppercase `R` measures from its right or bottom edge. The styles also apply to expressions such as `X=(#Gap# + 2)R` and to position values inside `!SetOption`.
 
+RainSyntax highlights all Shape primitives, attribute and transform modifiers, path commands, and references to named paths, gradients, and shared modifiers. Named gradient definitions use the color-channel styles for their stops.
+
 The **Invisible update** style colors the keyword in an update interval such as `Update=1000 | Invisible (60*1000)`. The interval still uses the usual number and formula styles.
 
 The **Regular Expression** style colors the whole pattern in `RegExp`, `IfMatch`, `RegExpFilter`, `InputRegExp`, and `InlinePattern`. This includes numbered options such as `IfMatch2` and pattern values assigned inside `!SetOption`. When a section sets `RegExpSubstitute=1`, the same style applies to the pattern side of its `Substitute` pairs.
