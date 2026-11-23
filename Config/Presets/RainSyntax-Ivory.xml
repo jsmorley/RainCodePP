@@ -43,6 +43,7 @@
             <WordsStyle name="Relative End (R)" styleID="45" fgColor="096472" bgColor="FFFFFC" fontName="Tahoma" fontStyle="1" fontSize="14" />
             <WordsStyle name="Regular Expression" styleID="46" fgColor="63358B" bgColor="FFFFFC" fontName="Tahoma" fontStyle="1" fontSize="14" />
             <WordsStyle name="URL" styleID="47" fgColor="105784" bgColor="FFFFFC" fontName="Tahoma" fontStyle="4" fontSize="14" />
+            <WordsStyle name="Invisible update" styleID="48" fgColor="8A3763" bgColor="FFFFFC" fontName="Tahoma" fontStyle="1" fontSize="14" />
         </LexerType>
     </LexerStyles>
 </NotepadPlus>

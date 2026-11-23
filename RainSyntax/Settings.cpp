@@ -42,6 +42,7 @@ constexpr wchar_t SettingsInstanceMutex[] = L"Local\\RainSyntax.Settings";
 constexpr wchar_t SettingsInstanceWindow[] = L"RainSyntax.Settings.Window";
 constexpr std::string_view PreviewLines[] = {
     "[Rainmeter]",
+    "Update=1000 | Invisible (60*1000)",
     "; Rainmeter syntax preview",
     "[Variables]",
     "colorBar=235,170,0,255",
@@ -474,7 +475,8 @@ constexpr const wchar_t* StyleDescriptions[] = {
     L"Lowercase r positions X or Y from the previous meter's left or top edge.",
     L"Uppercase R positions X or Y from the previous meter's right or bottom edge.",
     L"The complete pattern in a regex-valued option.",
-    L"A link value or literal URL. Embedded variables use their own styles."
+    L"A link value or literal URL. Embedded variables use their own styles.",
+    L"The Invisible keyword after the normal interval in an Update option."
 };
 static_assert(std::size(StyleDescriptions) == StyleCount);
 

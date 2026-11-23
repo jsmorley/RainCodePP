@@ -175,6 +175,7 @@ inline Palette ReadPalette(const std::filesystem::path& path)
         {L"Relative End (R)", L"075F75", L"77DCD6", 1},
         {L"Regular Expression", L"71358D", L"E0B6FF", 0},
         {L"URL", L"095C94", L"90D1FF", 0},
+        {L"Invisible update", L"8A3763", L"F4A9D4", 1},
     };
     static_assert(std::size(addedStyles) == StyleCount - Red);
     auto& page = palette[Default];

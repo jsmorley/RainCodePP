@@ -42,6 +42,7 @@ STYLES = [
     ("Relative End (R)", "075F75", "77DCD6", 1),
     ("Regular Expression", "71358D", "E0B6FF", 0),
     ("URL", "095C94", "90D1FF", 0),
+    ("Invisible update", "8A3763", "F4A9D4", 1),
 ]
 
 

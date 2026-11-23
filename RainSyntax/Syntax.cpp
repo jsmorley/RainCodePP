@@ -473,12 +473,14 @@ private:
         const bool inlineColor = isInline && Lower(Slice(Term(range.start, range.end))) == "color";
         Scan(range, {.formula = formula, .numbers = !literal && !references, .pipes = list,
             .format = format, .shape = isShape, .inlines = isInline, .flags = option == "flags",
-            .colors = inlineColor, .paths = !literal && !references && !isShape && !isInline}, depth);
+            .colors = inlineColor, .paths = !literal && !references && !isShape && !isInline,
+            .invisibleUpdate = option == "update"}, depth);
     }
 
     struct Context {
         bool formula = false, numbers = false, pipes = false, format = false;
         bool shape = false, inlines = false, flags = false, calls = false, colors = false, paths = false;
+        bool invisibleUpdate = false;
         Style numericStyle = Number;
     };
 
@@ -863,6 +865,11 @@ private:
                 const auto part = Term(first, range.end);
                 const bool path = context.paths && catalog.path.contains(Lower(Slice(part)));
                 if (context.pipes || path) Paint({i, i + 1}, Pipe);
+                if (context.invisibleUpdate)
+                {
+                    if (Lower(Slice(part)) == "invisible") Paint(part, InvisibleUpdate);
+                    context.invisibleUpdate = false;
+                }
                 if (path) Match(part, catalog.path, Selector);
                 modifier = context.shape;
                 shapeValue = false;
