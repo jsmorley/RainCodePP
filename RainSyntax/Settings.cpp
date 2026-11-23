@@ -1057,15 +1057,21 @@ struct Editor {
     {
         if (selection.cpMin >= selection.cpMax) return {};
         const auto text = PreviewText(Control(IDC_PREVIEW));
-        for (const auto& line : ReadPreviewLines(text))
+        const auto lines = ReadPreviewLines(text);
+        const PreviewLine* selected = nullptr;
+        for (const auto& line : lines)
         {
-            if (selection.cpMin < line.start || selection.cpMax > line.start + static_cast<long>(line.wide.size()))
-                continue;
-            const auto start = Utf8(line.wide.substr(0, selection.cpMin - line.start)).size();
-            const auto end = Utf8(line.wide.substr(0, selection.cpMax - line.start)).size();
-            return InspectSyntax(line.text, start, end, line.variables, line.regexSubstitute);
+            const auto end = line.start + static_cast<long>(line.wide.size());
+            if (line.start >= selection.cpMax) break;
+            if (line.start == end || selection.cpMin >= end) continue;
+            if (selected) return {};
+            selected = &line;
         }
-        return {};
+        if (!selected) return {};
+        const auto& line = *selected;
+        const auto start = Utf8(line.wide.substr(0, std::max(0L, selection.cpMin - line.start))).size();
+        const auto end = Utf8(line.wide.substr(0, selection.cpMax - line.start)).size();
+        return InspectSyntax(line.text, start, end, line.variables, line.regexSubstitute);
     }
 
     void SelectStyle(Style selected)
