@@ -76,52 +76,49 @@ std::wstring PreviewText(HWND window)
     return value;
 }
 
-LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
-    UINT_PTR id, DWORD_PTR)
+struct PreviewLine {
+    std::wstring_view wide;
+    std::string text;
+    long start;
+    bool variables = false, regexSubstitute = false;
+};
+
+std::vector<PreviewLine> ReadPreviewLines(std::wstring_view text)
 {
-    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, PreviewEditProc, id);
-    if (message == WM_CONTEXTMENU)
+    std::vector<PreviewLine> lines;
+    for (size_t start = 0; start < text.size();)
     {
-        POINT position{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-        if (lParam == -1)
+        auto end = text.find_first_of(L"\r\n", start);
+        if (end == std::wstring_view::npos) end = text.size();
+        const auto line = text.substr(start, end - start);
+        lines.push_back({line, Utf8(line), static_cast<long>(start)});
+        start = end + (text.substr(end, 2) == L"\r\n" ? 2 : 1);
+    }
+    for (size_t first = 0; first < lines.size();)
+    {
+        const auto name = SectionName(lines[first].text);
+        const bool variables = name.size() == 9 && _strnicmp(name.data(), "Variables", 9) == 0;
+        bool regexSubstitute = false;
+        size_t after = first;
+        do
         {
-            position = {};
-            GetCaretPos(&position);
-            ClientToScreen(window, &position);
-        }
-        if (const auto menu = CreatePopupMenu())
-        {
-            constexpr UINT SelectAll = 1;
-            CHARRANGE selection{};
-            SendMessageW(window, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
-            const auto selectionState = selection.cpMin != selection.cpMax ? MF_ENABLED : MF_GRAYED;
-            const auto pasteState = SendMessageW(window, EM_CANPASTE, CF_UNICODETEXT, 0) ? MF_ENABLED : MF_GRAYED;
-            AppendMenuW(menu, MF_STRING | selectionState, WM_CUT, L"Cu&t");
-            AppendMenuW(menu, MF_STRING | selectionState, WM_COPY, L"&Copy");
-            AppendMenuW(menu, MF_STRING | pasteState, WM_PASTE, L"&Paste");
-            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-            const auto textState = GetWindowTextLengthW(window) ? MF_ENABLED : MF_GRAYED;
-            AppendMenuW(menu, MF_STRING | textState, SelectAll, L"Select &All");
-            const auto command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
-                position.x, position.y, 0, window, nullptr);
-            DestroyMenu(menu);
-            if (command)
+            if (!variables)
             {
-                SetFocus(window);
-                if (command == SelectAll) SendMessageW(window, EM_SETSEL, 0, -1);
-                else SendMessageW(window, command, 0, 0);
+                if (const auto flag = RegexSubstituteSetting(lines[after].text)) regexSubstitute = *flag;
             }
-            return 0;
+            ++after;
+        } while (after < lines.size() && SectionName(lines[after].text).empty());
+        for (; first < after; ++first)
+        {
+            lines[first].variables = variables;
+            lines[first].regexSubstitute = regexSubstitute;
         }
     }
-    if (message == WM_PASTE || (message == WM_KEYDOWN &&
-        ((wParam == 'V' && GetKeyState(VK_CONTROL) < 0) || (wParam == VK_INSERT && GetKeyState(VK_SHIFT) < 0))))
-    {
-        SendMessageW(window, EM_PASTESPECIAL, CF_UNICODETEXT, 0);
-        return 0;
-    }
-    return DefSubclassProc(window, message, wParam, lParam);
+    return lines;
 }
+
+LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+    UINT_PTR id, DWORD_PTR editor);
 
 BOOL CALLBACK ActivateSettingsWindow(HWND window, LPARAM)
 {
@@ -1044,7 +1041,7 @@ struct Editor {
         if (!SendMessageW(control, EM_GETOLEINTERFACE, 0, reinterpret_cast<LPARAM>(richEdit.GetAddressOf())) ||
             FAILED(richEdit.As(&previewDocument)))
             throw std::runtime_error("Could not initialize the editable preview.");
-        SetWindowSubclass(control, PreviewEditProc, 1, 0);
+        SetWindowSubclass(control, PreviewEditProc, 1, reinterpret_cast<DWORD_PTR>(this));
         std::wstring sample;
         for (const auto line : PreviewLines)
         {
@@ -1056,6 +1053,28 @@ struct Editor {
         SendMessageW(control, EM_SETEVENTMASK, 0, ENM_CHANGE);
     }
 
+    SyntaxDetails DescribePreviewSelection(CHARRANGE selection) const
+    {
+        if (selection.cpMin >= selection.cpMax) return {};
+        const auto text = PreviewText(Control(IDC_PREVIEW));
+        for (const auto& line : ReadPreviewLines(text))
+        {
+            if (selection.cpMin < line.start || selection.cpMax > line.start + static_cast<long>(line.wide.size()))
+                continue;
+            const auto start = Utf8(line.wide.substr(0, selection.cpMin - line.start)).size();
+            const auto end = Utf8(line.wide.substr(0, selection.cpMax - line.start)).size();
+            return InspectSyntax(line.text, start, end, line.variables, line.regexSubstitute);
+        }
+        return {};
+    }
+
+    void SelectStyle(Style selected)
+    {
+        SendMessageW(Control(IDC_STYLE_ID), CB_SETCURSEL, selected, 0);
+        style = selected;
+        UpdateStyleFields();
+    }
+
     void StylePreview()
     {
         KillTimer(window, PreviewTimer);
@@ -1064,59 +1083,29 @@ struct Editor {
         const auto text = PreviewText(control);
         const auto& colors = presetPreview ? *presetPreview : palette;
 
-        struct Line {
-            std::string text;
-            long start;
-        };
-        std::vector<Line> lines;
-        for (size_t start = 0; start < text.size();)
-        {
-            auto end = text.find_first_of(L"\r\n", start);
-            if (end == std::wstring::npos) end = text.size();
-            lines.push_back({Utf8(std::wstring_view(text).substr(start, end - start)), static_cast<long>(start)});
-            start = end + (text.compare(end, 2, L"\r\n") == 0 ? 2 : 1);
-        }
-
         struct Run {
             long start, end;
             unsigned char style;
         };
         std::vector<Run> runs;
-        for (size_t first = 0; first < lines.size();)
+        for (const auto& line : ReadPreviewLines(text))
         {
-            const auto name = SectionName(lines[first].text);
-            const bool variables = name.size() == 9 && _strnicmp(name.data(), "Variables", 9) == 0;
-            bool regexSubstitute = false;
-            size_t after = first;
-            do
+            const auto styles = StyleLine(line.text, line.variables, line.regexSubstitute);
+            long position = line.start;
+            for (size_t byte = 0; byte < styles.size();)
             {
-                if (!variables)
+                const auto styleId = styles[byte];
+                const auto lead = static_cast<unsigned char>(line.text[byte]);
+                const int width = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+                const long end = position + (width == 4 ? 2 : 1);
+                if (styleId != Default)
                 {
-                    if (const auto flag = RegexSubstituteSetting(lines[after].text)) regexSubstitute = *flag;
+                    if (!runs.empty() && runs.back().end == position && runs.back().style == styleId)
+                        runs.back().end = end;
+                    else runs.push_back({position, end, styleId});
                 }
-                ++after;
-            } while (after < lines.size() && SectionName(lines[after].text).empty());
-
-            for (; first < after; ++first)
-            {
-                const auto& line = lines[first];
-                const auto styles = StyleLine(line.text, variables, regexSubstitute);
-                long position = line.start;
-                for (size_t byte = 0; byte < styles.size();)
-                {
-                    const auto styleId = styles[byte];
-                    const auto lead = static_cast<unsigned char>(line.text[byte]);
-                    const int width = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
-                    const long end = position + (width == 4 ? 2 : 1);
-                    if (styleId != Default)
-                    {
-                        if (!runs.empty() && runs.back().end == position && runs.back().style == styleId)
-                            runs.back().end = end;
-                        else runs.push_back({position, end, styleId});
-                    }
-                    position = end;
-                    byte += width;
-                }
+                position = end;
+                byte += width;
             }
         }
 
@@ -1582,6 +1571,67 @@ struct Editor {
         return TRUE;
     }
 };
+
+LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
+    UINT_PTR id, DWORD_PTR data)
+{
+    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, PreviewEditProc, id);
+    if (message == WM_CONTEXTMENU)
+    {
+        POINT position{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (lParam == -1)
+        {
+            position = {};
+            GetCaretPos(&position);
+            ClientToScreen(window, &position);
+        }
+        if (const auto menu = CreatePopupMenu())
+        {
+            constexpr UINT SelectAll = 1;
+            constexpr UINT ChooseStyle = 2;
+            CHARRANGE selection{};
+            SendMessageW(window, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
+            const auto selectionState = selection.cpMin != selection.cpMax ? MF_ENABLED : MF_GRAYED;
+            const auto pasteState = SendMessageW(window, EM_CANPASTE, CF_UNICODETEXT, 0) ? MF_ENABLED : MF_GRAYED;
+            AppendMenuW(menu, MF_STRING | selectionState, WM_CUT, L"Cu&t");
+            AppendMenuW(menu, MF_STRING | selectionState, WM_COPY, L"&Copy");
+            AppendMenuW(menu, MF_STRING | pasteState, WM_PASTE, L"&Paste");
+            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+            const auto textState = GetWindowTextLengthW(window) ? MF_ENABLED : MF_GRAYED;
+            AppendMenuW(menu, MF_STRING | textState, SelectAll, L"Select &All");
+            auto& editor = *reinterpret_cast<Editor*>(data);
+            const auto details = editor.DescribePreviewSelection(selection);
+            if (details.style)
+            {
+                const auto& palette = editor.presetPreview ? *editor.presetPreview : editor.palette;
+                const auto style = L"Style: " + palette[*details.style].name;
+                const auto vocabulary = std::wstring(L"Vocabulary: ") +
+                    (details.vocabulary ? details.vocabulary : L"None");
+                AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(menu, MF_STRING, ChooseStyle, style.c_str());
+                AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, vocabulary.c_str());
+            }
+            const auto command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+                position.x, position.y, 0, window, nullptr);
+            DestroyMenu(menu);
+            if (command)
+            {
+                SetFocus(window);
+                if (command == SelectAll) SendMessageW(window, EM_SETSEL, 0, -1);
+                else if (command == ChooseStyle && details.style) editor.SelectStyle(*details.style);
+                else SendMessageW(window, command, 0, 0);
+            }
+            return 0;
+        }
+    }
+    if (message == WM_PASTE || (message == WM_KEYDOWN &&
+        ((wParam == 'V' && GetKeyState(VK_CONTROL) < 0) || (wParam == VK_INSERT && GetKeyState(VK_SHIFT) < 0))))
+    {
+        SendMessageW(window, EM_PASTESPECIAL, CF_UNICODETEXT, 0);
+        return 0;
+    }
+    return DefSubclassProc(window, message, wParam, lParam);
+}
 
 INT_PTR CALLBACK Dialog(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {

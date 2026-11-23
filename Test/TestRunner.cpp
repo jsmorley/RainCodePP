@@ -79,6 +79,27 @@ bool CheckEditing()
     return okay;
 }
 
+bool CheckSyntaxDetails()
+{
+    using namespace RainSyntax;
+    constexpr std::string_view line = "Shape2=Rectangle 0,0,10,10 | Fill Color [#Accent] | StrokeWidth 1";
+    const auto matches = [](std::string_view source, std::string_view token, Style style, std::wstring_view category) {
+        const auto start = source.find(token);
+        if (start == std::string_view::npos) return false;
+        const auto details = InspectSyntax(source, start, start + token.size(), false);
+        return details.style == style && (details.vocabulary ? std::wstring_view(details.vocabulary) : L"") == category;
+    };
+    const bool okay = matches(line, "Shape2", Option, L"Options with numbered variants") &&
+        matches(line, "Rectangle", Value, L"Shape primitives") &&
+        matches(line, "Color", Value, L"Shape modifier values") &&
+        matches(line, "StrokeWidth", Selector, L"Shape modifiers") &&
+        matches(line, "[#Accent]", UserVariable, L"") &&
+        matches("Meter=Shape", "Shape", Value, L"Fixed values (Option=Value)") &&
+        !InspectSyntax(line, 0, line.size(), false).style;
+    if (!okay) std::fputs("FAIL syntax style and vocabulary inspection\n", stderr);
+    return okay;
+}
+
 bool CheckRegexSubstituteEdit()
 {
     using namespace RainSyntax;
@@ -300,7 +321,7 @@ int main(int argc, char* argv[])
 		return 2;
 	}
 
-	int failures = (CheckEditing() ? 0 : 1) + (CheckRegexSubstituteEdit() ? 0 : 1);
+	int failures = (CheckEditing() ? 0 : 1) + (CheckRegexSubstituteEdit() ? 0 : 1) + (CheckSyntaxDetails() ? 0 : 1);
 	int passes = 0;
 
 	for (int argi = firstCase; argi < argc; ++argi)

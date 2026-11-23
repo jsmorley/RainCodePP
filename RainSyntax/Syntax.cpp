@@ -27,6 +27,12 @@ constexpr View WebParserFlags = "ForceReload Resync NoCookies Hyperlink TempFile
 constexpr View DollarTerms = "Input MouseX MouseY SkinX SkinY SkinW SkinH SkinPhysicalX SkinPhysicalY SkinPhysicalW SkinPhysicalH SkinZoomedW SkinZoomedH SkinZPos SkinDpiFactor SkinZoomFactor SkinVisible DisplayCount DisplayVirtualScreenX DisplayVirtualScreenY DisplayVirtualScreenW DisplayVirtualScreenH DisplayVirtualScreenPhysicalX DisplayVirtualScreenPhysicalY DisplayVirtualScreenPhysicalW DisplayVirtualScreenPhysicalH";
 constexpr View Plugins = "ActionTimer AdvancedCPU AudioLevel CoreTemp DragDrop FileView FolderInfo InputText iTunes MediaKey Mouse NowPlaying PerfMon Quote RecycleManager ResMon RunCommand SpeedFan UsageMonitor WebParser WiFiStatus WindowMessage";
 
+enum class Category : size_t {
+    Options, Numbered, FixedOptions, FixedValues, Bangs, HashVariables, DeprecatedOptions,
+    DeprecatedValues, DeprecatedBangs, Functions, Selectors, Shapes, ShapeModifiers,
+    ShapeValues, PathCommands, InlineSettings, Flags, DollarVariables, Plugins, Count
+};
+
 constexpr VocabularyGroup Groups[] = {
     {L"Options", Vocabulary[0]},
     {L"Options with numbered variants", Vocabulary[1]},
@@ -48,6 +54,7 @@ constexpr VocabularyGroup Groups[] = {
     {L"Built-in $variables (omit $)", DollarTerms},
     {L"Plugin names (omit .dll)", Plugins}
 };
+static_assert(std::size(Groups) == static_cast<size_t>(Category::Count));
 
 bool Digit(char c) { return c >= '0' && c <= '9'; }
 bool Alpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
@@ -127,7 +134,7 @@ Terms MakeTerms(View words)
 }
 
 struct Catalog {
-    Terms options, numbered, deprecatedOptions, bangs, skinBangs, deprecatedBangs, variables, dollars;
+    Terms options, numbered, fixedOptions, deprecatedOptions, bangs, skinBangs, deprecatedBangs, variables, dollars;
     Terms functions, selectors, shapes, modifiers, shapeValues, path, inlines, flags;
     std::unordered_map<std::string, Terms> values, deprecatedValues;
 
@@ -141,6 +148,7 @@ struct Catalog {
         load(1, numbered);
         load(1, options);
         load(2, options);
+        load(2, fixedOptions);
         load(4, bangs);
         load(8, deprecatedBangs);
         for (const auto& [key, bang] : bangs)
@@ -317,8 +325,19 @@ public:
 
     std::vector<unsigned char> styles;
     EditingTerms editing;
+    Range inspection{};
+    std::optional<Category> inspectedCategory;
+    bool mixedCategories = false;
 
 private:
+    void RecordCategory(Range term, Category category)
+    {
+        if (inspection.start >= inspection.end || term.start >= term.end ||
+            term.end <= inspection.start || term.start >= inspection.end) return;
+        if (inspectedCategory && *inspectedCategory != category) mixedCategories = true;
+        inspectedCategory = category;
+    }
+
     View text;
     std::vector<size_t> closes;
     size_t cursor;
@@ -366,11 +385,12 @@ private:
         }
     }
 
-    bool Match(Range range, const Terms& list, Style style, bool typos = false)
+    bool Match(Range range, const Terms& list, Style style, Category category, bool typos = false)
     {
         Offer(range, list, typos);
         if (!list.contains(Lower(Slice(range)))) return false;
         Paint(range, style);
+        RecordCategory(range, category);
         return true;
     }
 
@@ -383,12 +403,15 @@ private:
         if (Words().deprecatedOptions.contains(name) || Words().deprecatedOptions.contains(base))
         {
             Paint(range, DeprecatedOption);
+            RecordCategory(range, Category::DeprecatedOptions);
             editing.canonical.clear();
             editing.typo.clear();
         }
         else if (Words().options.contains(name) || Words().options.contains(base))
         {
             Paint(range, name.starts_with('@') ? Directive : Option);
+            RecordCategory(range, Words().numbered.contains(base) ? Category::Numbered :
+                Words().fixedOptions.contains(base) ? Category::FixedOptions : Category::Options);
             if (base != name && cursor == range.end && editing.canonical.empty())
             {
                 const auto found = Words().options.find(base);
@@ -406,11 +429,13 @@ private:
         if (old != catalog.deprecatedValues.end() && old->second.contains(Lower(Slice(range))))
         {
             Paint(range, DeprecatedValue);
+            RecordCategory(range, Category::DeprecatedValues);
             return;
         }
         if (current == catalog.values.end()) return;
         if (Term(range.start, range.end).end != range.end) return;
-        if (Match(range, current->second, Value, option != "plugin" && option != "playername")) return;
+        const auto category = option == "plugin" ? Category::Plugins : Category::FixedValues;
+        if (Match(range, current->second, Value, category, option != "plugin" && option != "playername")) return;
         if (option != "plugin" && option != "playername") Paint(range, InvalidValue);
     }
 
@@ -429,7 +454,7 @@ private:
             const auto part = TrimRange({range.start, end});
             const auto modifier = Term(part.start, part.end);
             const auto name = Lower(Slice(modifier));
-            Match(modifier, Words().modifiers, Selector);
+            Match(modifier, Words().modifiers, Selector, Category::ShapeModifiers);
             const auto args = TrimRange({modifier.end, part.end});
             if (name == "extend" || name == "transformorder")
             {
@@ -442,7 +467,10 @@ private:
                     {
                         const auto transform = Lower(Slice(entry));
                         if (transform == "rotate" || transform == "scale" || transform == "skew" || transform == "offset")
+                        {
                             Paint(entry, Selector);
+                            RecordCategory(entry, Category::ShapeModifiers);
+                        }
                         else Scan(entry, {.numbers = true}, depth);
                     }
                     if (comma < args.end) Paint({comma, comma + 1}, Operator);
@@ -455,7 +483,7 @@ private:
                 name == "strokeendcap" || name == "strokedashcap" || name == "strokelinejoin")
             {
                 const auto value = Term(args.start, args.end);
-                Match(value, Words().shapeValues, Value);
+                Match(value, Words().shapeValues, Value, Category::ShapeValues);
                 const auto kind = Lower(Slice(value));
                 const auto parameter = TrimRange({value.end, args.end});
                 if (kind == "lineargradient" || kind == "lineargradient1" ||
@@ -475,7 +503,7 @@ private:
     {
         const auto end = FindTopLevelDelimiter(range, '|');
         const auto primitive = Term(range.start, end);
-        if (!Match(primitive, Words().shapes, Value) && primitive.start != primitive.end)
+        if (!Match(primitive, Words().shapes, Value, Category::Shapes) && primitive.start != primitive.end)
             Paint(primitive, InvalidValue);
         const auto name = Lower(Slice(primitive));
         const Range arguments{primitive.end, end};
@@ -587,7 +615,7 @@ private:
         if (isInline)
         {
             const Range term = Term(range.start, range.end);
-            if (!Match(term, Words().inlines, Value) && term.start != term.end)
+            if (!Match(term, Words().inlines, Value, Category::InlineSettings) && term.start != term.end)
                 Paint(term, InvalidValue);
         }
         if (color && TryColor(range, depth)) return;
@@ -865,11 +893,13 @@ private:
         {
             style = BuiltInHash(Lower(name)) ? BuiltInVariable : UserVariable;
             Offer({body, close}, Words().variables);
+            if (style == BuiltInVariable) RecordCategory({body, close}, Category::HashVariables);
         }
         if (key == '$')
         {
             style = BuiltInDollar(Lower(name)) ? DollarVariable : Default;
             Offer({body, close}, Words().dollars);
+            if (style == DollarVariable) RecordCategory({body, close}, Category::DollarVariables);
         }
         if (key == '%') style = EnvironmentVariable;
         Paint({start, close + 1}, style);
@@ -885,7 +915,7 @@ private:
             {
                 Paint({colon, colon + 1}, Operator);
                 const Range selector = Term(colon + 1, close);
-                if (!Match(selector, Words().selectors, Selector) && selector.end < close && text[selector.end] == '(')
+                if (!Match(selector, Words().selectors, Selector, Category::Selectors) && selector.end < close && text[selector.end] == '(')
                     Paint(selector, Function);
                 Scan({selector.start == selector.end ? colon + 1 : selector.end, close},
                     {.formula = true, .numbers = true, .calls = true}, depth + 1);
@@ -917,8 +947,17 @@ private:
         if (mark == '#' && !escaped) Offer(name, Words().variables);
         if (mark == '$' && !escaped) Offer(name, Words().dollars);
         if (escaped && closed) Paint({i, last + 1}, Escaped);
-        else if (mark == '#' && closed) Paint({i, last + 1}, BuiltInHash(word) ? BuiltInVariable : UserVariable);
-        else if (mark == '$' && BuiltInDollar(word)) Paint({i, last + closed}, DollarVariable);
+        else if (mark == '#' && closed)
+        {
+            const bool builtIn = BuiltInHash(word);
+            Paint({i, last + 1}, builtIn ? BuiltInVariable : UserVariable);
+            if (builtIn) RecordCategory(name, Category::HashVariables);
+        }
+        else if (mark == '$' && BuiltInDollar(word))
+        {
+            Paint({i, last + closed}, DollarVariable);
+            RecordCategory(name, Category::DollarVariables);
+        }
         else if (mark == '%' && closed && !Digit(text[i + 1])) Paint({i, last + 1}, EnvironmentVariable);
         return last + closed;
     }
@@ -990,7 +1029,7 @@ private:
                     if (Lower(Slice(part)) == "invisible") Paint(part, InvisibleUpdate);
                     context.invisibleUpdate = false;
                 }
-                if (path) Match(part, catalog.path, Selector);
+                if (path) Match(part, catalog.path, Selector, Category::PathCommands);
                 colorNext = context.colors;
             }
             else if (ch == '%' && i + 1 < range.end && Digit(text[i + 1]))
@@ -1031,8 +1070,8 @@ private:
                 while (j < range.end && Word(text[j])) ++j;
                 Range word{i, j};
                 if (context.calls && j < range.end && text[j] == '(') Paint(word, Function);
-                if (formula) Match(word, catalog.functions, Function);
-                if (context.flags) Match(word, catalog.flags, Value);
+                if (formula) Match(word, catalog.functions, Function, Category::Functions);
+                if (context.flags) Match(word, catalog.flags, Value, Category::Flags);
                 i = word.end;
                 continue;
             }
@@ -1089,8 +1128,11 @@ private:
         if (redirected) lower.erase(0, 5);
         const bool deprecated = catalog.deprecatedBangs.contains(lower);
         Offer({command.start + prefix, command.end}, candidates, !deprecated);
-        if (recognized) Paint({start, command.end}, Bang);
-        else if (deprecated) Paint({start, command.end}, DeprecatedBang);
+        if (recognized || deprecated)
+        {
+            Paint({start, command.end}, recognized ? Bang : DeprecatedBang);
+            RecordCategory({start, command.end}, recognized ? Category::Bangs : Category::DeprecatedBangs);
+        }
 
         const auto args = Arguments(command.end, end);
         size_t key = Missing, value = Missing;
@@ -1257,6 +1299,25 @@ std::vector<unsigned char> StyleLine(std::string_view line, bool variablesSectio
     LineParser parser(line);
     parser.Parse(variablesSection, regexSubstitute);
     return std::move(parser.styles);
+}
+
+SyntaxDetails InspectSyntax(std::string_view line, size_t start, size_t end,
+    bool variablesSection, bool regexSubstitute)
+{
+    end = std::min(end, line.size());
+    while (start < end && Space(line[start])) ++start;
+    while (end > start && Space(line[end - 1])) --end;
+    if (start >= end) return {};
+    LineParser parser(line);
+    parser.inspection = {start, end};
+    parser.Parse(variablesSection, regexSubstitute);
+    const auto& styles = parser.styles;
+    const auto style = styles[start];
+    if (std::any_of(styles.begin() + start, styles.begin() + end, [style](auto item) { return item != style; }))
+        return {};
+    const auto category = parser.inspectedCategory;
+    return {static_cast<Style>(style),
+        category && !parser.mixedCategories ? Groups[static_cast<size_t>(*category)].label : nullptr};
 }
 
 EditingTerms TermsAt(std::string_view line, size_t caret, bool variablesSection)
