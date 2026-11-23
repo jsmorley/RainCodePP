@@ -326,7 +326,7 @@ public:
     std::vector<unsigned char> styles;
     EditingTerms editing;
     Range inspection{};
-    bool inspectingHexColor = false;
+    bool inspectingLiteralColor = false;
     std::optional<Category> inspectedCategory;
     bool mixedCategories = false;
 
@@ -745,6 +745,12 @@ private:
         return range.end;
     }
 
+    void RecordLiteralColor(Range color)
+    {
+        if (inspection.start < inspection.end && inspection.start >= color.start && inspection.end <= color.end)
+            inspectingLiteralColor = true;
+    }
+
     bool TryColor(Range range, unsigned depth)
     {
         range = TrimRange(range);
@@ -755,8 +761,7 @@ private:
         if ((hex.size() == 6 || hex.size() == 8) &&
             std::all_of(hex.begin(), hex.end(), HexDigit))
         {
-            if (inspection.start < inspection.end && inspection.start >= range.start && inspection.end <= range.end)
-                inspectingHexColor = true;
+            RecordLiteralColor(range);
             if (prefix) Paint({range.start, digits.start}, Color);
             for (size_t i = 0; i < hex.size() / 2; ++i)
                 Paint({digits.start + i * 2, digits.start + (i + 1) * 2}, channels[i]);
@@ -787,12 +792,14 @@ private:
             start = end + 1;
         }
         if (count < 3) return false;
+        bool literal = true;
         for (size_t i = 0; i < count; ++i)
         {
             const auto part = parts[i];
             if (Digit(text[part.start]) || text[part.start] == '-' || text[part.start] == '+') Paint(part, channels[i]);
             else
             {
+                literal = false;
                 Context context{};
                 context.numbers = true;
                 context.numericStyle = channels[i];
@@ -800,6 +807,7 @@ private:
             }
             if (i + 1 < count) Paint({delimiters[i], delimiters[i] + 1}, Operator);
         }
+        if (literal) RecordLiteralColor(range);
         return true;
     }
 
@@ -1319,8 +1327,13 @@ SyntaxDetails InspectSyntax(std::string_view line, size_t start, size_t end,
     {
         const auto style = static_cast<Style>(parser.styles[i]);
         if (std::find(details.styles.begin(), details.styles.end(), style) != details.styles.end()) continue;
-        if (!details.styles.empty() && !parser.inspectingHexColor) return {};
+        if (!details.styles.empty() && !parser.inspectingLiteralColor) return {};
         details.styles.push_back(style);
+    }
+    if (details.styles.size() > 1)
+    {
+        std::erase(details.styles, Operator);
+        std::erase(details.styles, Default);
     }
     if (parser.inspectedCategory && !parser.mixedCategories)
         details.vocabulary = Groups[static_cast<size_t>(*parser.inspectedCategory)].label;

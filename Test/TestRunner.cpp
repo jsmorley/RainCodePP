@@ -100,6 +100,11 @@ bool CheckSyntaxDetails()
         InspectSyntax("FontColor=0xFF8020", 10, 18, false).styles == std::vector{Color, Red, Green, Blue} &&
         InspectSyntax("FontColor=FF8020", 11, 14, false).styles == std::vector{Red, Green} &&
         InspectSyntax("FontColor=FF8020", 9, 16, false).styles.empty() &&
+        InspectSyntax("colorBar=235,170,0,255", 9, 22, true).styles == std::vector{Red, Green, Blue, AlphaChannel} &&
+        InspectSyntax("FontColor=235, 170, 0", 10, 21, false).styles == std::vector{Red, Green, Blue} &&
+        InspectSyntax("FontColor=235, 170, 0", 10, 13, false).styles == std::vector{Red} &&
+        InspectSyntax("FontColor=235, 170, 0", 13, 14, false).styles == std::vector{Operator} &&
+        InspectSyntax("FontColor=235, #G#, 0", 10, 21, false).styles.empty() &&
         InspectSyntax(line, 0, line.size(), false).styles.empty();
     if (!okay) std::fputs("FAIL syntax style and vocabulary inspection\n", stderr);
     return okay;
