@@ -36,7 +36,7 @@ struct EditingTerms {
 // Styles are indexed by byte, matching Scintilla positions for every supported encoding.
 std::vector<unsigned char> StyleLine(std::string_view line, bool variablesSection, bool regexSubstitute = false);
 struct SyntaxDetails {
-    std::optional<Style> style;
+    std::vector<Style> styles;
     const wchar_t* vocabulary = nullptr;
 };
 SyntaxDetails InspectSyntax(std::string_view line, size_t start, size_t end,

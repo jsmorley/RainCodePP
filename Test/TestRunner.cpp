@@ -87,7 +87,7 @@ bool CheckSyntaxDetails()
         const auto start = source.find(token);
         if (start == std::string_view::npos) return false;
         const auto details = InspectSyntax(source, start, start + token.size(), false);
-        return details.style == style && (details.vocabulary ? std::wstring_view(details.vocabulary) : L"") == category;
+        return details.styles == std::vector{style} && (details.vocabulary ? std::wstring_view(details.vocabulary) : L"") == category;
     };
     const bool okay = matches(line, "Shape2", Option, L"Options with numbered variants") &&
         matches(line, "Rectangle", Value, L"Shape primitives") &&
@@ -95,7 +95,12 @@ bool CheckSyntaxDetails()
         matches(line, "StrokeWidth", Selector, L"Shape modifiers") &&
         matches(line, "[#Accent]", UserVariable, L"") &&
         matches("Meter=Shape", "Shape", Value, L"Fixed values (Option=Value)") &&
-        !InspectSyntax(line, 0, line.size(), false).style;
+        matches("FontColor=FF8020C8", "80", Green, L"") &&
+        InspectSyntax("FontColor=FF8020C8", 10, 18, false).styles == std::vector{Red, Green, Blue, AlphaChannel} &&
+        InspectSyntax("FontColor=0xFF8020", 10, 18, false).styles == std::vector{Color, Red, Green, Blue} &&
+        InspectSyntax("FontColor=FF8020", 11, 14, false).styles == std::vector{Red, Green} &&
+        InspectSyntax("FontColor=FF8020", 9, 16, false).styles.empty() &&
+        InspectSyntax(line, 0, line.size(), false).styles.empty();
     if (!okay) std::fputs("FAIL syntax style and vocabulary inspection\n", stderr);
     return okay;
 }

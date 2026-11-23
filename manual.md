@@ -48,7 +48,7 @@ A bang on its own line in a skin uses the **Invalid Value** style, with or witho
 
 Open **Edit vocabulary and palettes** from the sidebar. Choose a preset to preview it on a sample skin. The preview uses each syntax style's font settings, or the active Notepad++ editor's default font and size where the palette leaves them blank. It also reflects the editor's zoom when you open Settings. There are seven light palettes, including **Ivory** with Tahoma 14, and six dark palettes.
 
-Type or paste Rainmeter code into the **Editable preview** to see it highlighted as you work. Right-click the preview for **Cut**, **Copy**, **Paste**, and **Select All**. Select a term and right-click to see its vocabulary category and syntax style. Click the style name to select it in **Set style for syntax types**. Your test text stays in the preview when you change palettes. Closing Settings discards it.
+Type or paste Rainmeter code into the **Editable preview** to see it highlighted as you work. Right-click the preview for **Cut**, **Copy**, **Paste**, and **Select All**. Select a term and right-click to see its vocabulary category and syntax style. Click the style name to select it in **Set style for syntax types**. A selected hex color lists each channel style in the selection. Your test text stays in the preview when you change palettes. Closing Settings discards it.
 
 To remove a preset from your dropdown, hold **Shift** while it is highlighted and click the entry marked **(delete)**. The change applies to your profile and survives upgrades. To restore the entry, close RainSyntax Settings and remove that preset's line from the `[HiddenPresets]` section of `RainSyntax-settings.ini`.
 

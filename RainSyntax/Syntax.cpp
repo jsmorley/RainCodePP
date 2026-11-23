@@ -326,6 +326,7 @@ public:
     std::vector<unsigned char> styles;
     EditingTerms editing;
     Range inspection{};
+    bool inspectingHexColor = false;
     std::optional<Category> inspectedCategory;
     bool mixedCategories = false;
 
@@ -754,6 +755,8 @@ private:
         if ((hex.size() == 6 || hex.size() == 8) &&
             std::all_of(hex.begin(), hex.end(), HexDigit))
         {
+            if (inspection.start < inspection.end && inspection.start >= range.start && inspection.end <= range.end)
+                inspectingHexColor = true;
             if (prefix) Paint({range.start, digits.start}, Color);
             for (size_t i = 0; i < hex.size() / 2; ++i)
                 Paint({digits.start + i * 2, digits.start + (i + 1) * 2}, channels[i]);
@@ -1311,13 +1314,17 @@ SyntaxDetails InspectSyntax(std::string_view line, size_t start, size_t end,
     LineParser parser(line);
     parser.inspection = {start, end};
     parser.Parse(variablesSection, regexSubstitute);
-    const auto& styles = parser.styles;
-    const auto style = styles[start];
-    if (std::any_of(styles.begin() + start, styles.begin() + end, [style](auto item) { return item != style; }))
-        return {};
-    const auto category = parser.inspectedCategory;
-    return {static_cast<Style>(style),
-        category && !parser.mixedCategories ? Groups[static_cast<size_t>(*category)].label : nullptr};
+    SyntaxDetails details;
+    for (size_t i = start; i < end; ++i)
+    {
+        const auto style = static_cast<Style>(parser.styles[i]);
+        if (std::find(details.styles.begin(), details.styles.end(), style) != details.styles.end()) continue;
+        if (!details.styles.empty() && !parser.inspectingHexColor) return {};
+        details.styles.push_back(style);
+    }
+    if (parser.inspectedCategory && !parser.mixedCategories)
+        details.vocabulary = Groups[static_cast<size_t>(*parser.inspectedCategory)].label;
+    return details;
 }
 
 EditingTerms TermsAt(std::string_view line, size_t caret, bool variablesSection)

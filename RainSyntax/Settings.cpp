@@ -1588,7 +1588,8 @@ LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARA
         if (const auto menu = CreatePopupMenu())
         {
             constexpr UINT SelectAll = 1;
-            constexpr UINT ChooseStyle = 2;
+            constexpr UINT FirstStyle = 2;
+            constexpr UINT EndStyle = FirstStyle + StyleCount;
             CHARRANGE selection{};
             SendMessageW(window, EM_EXGETSEL, 0, reinterpret_cast<LPARAM>(&selection));
             const auto selectionState = selection.cpMin != selection.cpMax ? MF_ENABLED : MF_GRAYED;
@@ -1601,14 +1602,17 @@ LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARA
             AppendMenuW(menu, MF_STRING | textState, SelectAll, L"Select &All");
             auto& editor = *reinterpret_cast<Editor*>(data);
             const auto details = editor.DescribePreviewSelection(selection);
-            if (details.style)
+            if (!details.styles.empty())
             {
                 const auto& palette = editor.presetPreview ? *editor.presetPreview : editor.palette;
-                const auto style = L"Style: " + palette[*details.style].name;
+                AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+                for (const auto style : details.styles)
+                {
+                    const auto label = L"Style: " + palette[style].name;
+                    AppendMenuW(menu, MF_STRING, FirstStyle + style, label.c_str());
+                }
                 const auto vocabulary = std::wstring(L"Vocabulary: ") +
                     (details.vocabulary ? details.vocabulary : L"None");
-                AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-                AppendMenuW(menu, MF_STRING, ChooseStyle, style.c_str());
                 AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, vocabulary.c_str());
             }
             const auto command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
@@ -1618,7 +1622,8 @@ LRESULT CALLBACK PreviewEditProc(HWND window, UINT message, WPARAM wParam, LPARA
             {
                 SetFocus(window);
                 if (command == SelectAll) SendMessageW(window, EM_SETSEL, 0, -1);
-                else if (command == ChooseStyle && details.style) editor.SelectStyle(*details.style);
+                else if (command >= FirstStyle && command < EndStyle)
+                    editor.SelectStyle(static_cast<Style>(command - FirstStyle));
                 else SendMessageW(window, command, 0, 0);
             }
             return 0;
