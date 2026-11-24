@@ -163,7 +163,13 @@ function Add-ProfileFiles($Payload, [string]$ConfigRoot, [string]$Directory) {
     }
 
     $active = Join-Path $PSScriptRoot 'active.xml'
-    $styles.Save($active)
+    # Older Notepad++ versions skip the lexer language metadata if this XML has a UTF-8 BOM.
+    $writerSettings = [System.Xml.XmlWriterSettings]::new()
+    $writerSettings.Encoding = [System.Text.UTF8Encoding]::new($false)
+    $writerSettings.Indent = $true
+    $writer = [System.Xml.XmlWriter]::Create($active, $writerSettings)
+    try { $styles.Save($writer) }
+    finally { $writer.Dispose() }
     Confirm-LexerXml $active
     $payload[$installedXml] = $active
     if ($hasSavedPalette) { $payload[$savedPalette] = $active }
@@ -236,7 +242,10 @@ function Install-RainSyntax {
     $directory = (Resolve-Path -LiteralPath $NppDirectory).Path
     $exe = Join-Path $directory 'notepad++.exe'
     if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Choose the folder containing notepad++.exe.' }
-    if ([version](Get-Item -LiteralPath $exe).VersionInfo.FileVersion -lt [version]'8.4') {
+    $fileVersion = (Get-Item -LiteralPath $exe).VersionInfo
+    # Older Notepad++ builds may report a string such as 8.33 for 8.3.3.
+    $version = [version]::new($fileVersion.FileMajorPart, $fileVersion.FileMinorPart)
+    if ($version -lt [version]'8.4') {
         throw 'RainSyntax requires Notepad++ 8.4 or later.'
     }
     $architecture = Get-NotepadArchitecture $exe
